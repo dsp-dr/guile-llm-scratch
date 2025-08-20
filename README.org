@@ -1,48 +1,58 @@
-#+TITLE: [BOOK_TITLE] Implementation in Guile3
-#+AUTHOR: Your Name
+#+TITLE: Guile LLM from Scratch - Pure Scheme Transformer Implementation
+#+AUTHOR: DSP-DR Team
 #+DATE: 2025-08-20
 
 #+BEGIN_EXPORT html
 <p align="center">
   <img src="https://img.shields.io/badge/status-experimental-orange.svg" alt="Experimental">
-  <img src="https://img.shields.io/badge/guile-3.0+-blue.svg" alt="Guile 3.0+">
+  <img src="https://img.shields.io/badge/guile-3.0.10+-blue.svg" alt="Guile 3.0.10+">
   <img src="https://img.shields.io/badge/platform-FreeBSD-red.svg" alt="FreeBSD">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License">
+  <img src="https://img.shields.io/badge/literate-org--mode-success.svg" alt="Literate Programming">
+  <img src="https://img.shields.io/badge/ML-transformer-purple.svg" alt="Transformer">
+  <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
 </p>
 #+END_EXPORT
 
 * Overview
 
-This project is a Guile3 implementation of concepts from [BOOK_TITLE], adapted to leverage Scheme's functional programming paradigm and Guile's powerful features.
+Pure Guile3 implementation of transformer-based language models from scratch. This project implements the complete LLM architecture including tensor operations, attention mechanisms, and training loops without any external machine learning dependencies - everything built using Scheme's functional programming paradigm.
 
 ** Key Features
-- Pure functional approach with immutable data structures
-- Leverages Guile3-specific features (delimited continuations, GOOPS, Fibers)
-- FreeBSD-optimized with native system call integration
-- Comprehensive test suite using SRFI-64
-- Literate programming with Org-mode and Babel
+- 🧮 **Tensor Operations**: SRFI-4 optimized numerical arrays with broadcasting
+- 🔤 **BPE Tokenizer**: Byte-pair encoding implementation from scratch
+- 🎯 **Attention Mechanisms**: Multi-head scaled dot-product attention
+- 🤖 **Transformer Architecture**: Complete encoder/decoder implementation
+- 📚 **Literate Programming**: Org-mode with Babel for documentation-first development
+- 🧪 **Comprehensive Testing**: SRFI-64 test suites for all modules
+- 🚀 **Zero Dependencies**: Pure Scheme implementation, no external ML libraries
 
 * Architecture
 
 #+BEGIN_SRC mermaid :exports results :file architecture.png
 graph TB
-    subgraph "Core Layer"
-        A[Data Structures] --> B[Core Algorithms]
-        B --> C[State Management]
+    subgraph "Foundation Layer"
+        A[Tensor Operations<br/>SRFI-4 Arrays] --> B[Matrix Math<br/>Broadcasting]
     end
     
-    subgraph "Service Layer"
-        D[Module System] --> E[Error Handling]
-        E --> F[Configuration]
+    subgraph "NLP Layer"
+        C[BPE Tokenizer] --> D[Vocabulary<br/>Management]
     end
     
-    subgraph "Interface Layer"
-        G[Public API] --> H[REPL Interface]
-        H --> I[Examples]
+    subgraph "Neural Network Layer"
+        E[Attention<br/>Mechanisms] --> F[Multi-Head<br/>Attention]
+        G[Feed-Forward<br/>Networks] --> H[Activations<br/>GELU/ReLU]
     end
     
-    C --> D
-    F --> G
+    subgraph "Model Layer"
+        I[Transformer<br/>Encoder] --> K[Text Generation]
+        J[Transformer<br/>Decoder] --> K
+    end
+    
+    B --> E
+    D --> I
+    F --> I
+    H --> J
 #+END_SRC
 
 * Installation
@@ -55,8 +65,11 @@ graph TB
 ** Building from Source
 #+BEGIN_SRC bash
 # Clone the repository
-git clone https://github.com/yourusername/project-name.git
-cd project-name
+git clone https://github.com/dsp-dr/guile-llm-scratch.git
+cd guile-llm-scratch
+
+# Tangle literate org files to generate Scheme code
+gmake tangle
 
 # Build the project
 gmake all
@@ -64,19 +77,31 @@ gmake all
 # Run tests
 gmake test
 
-# Install (optional)
-gmake install PREFIX=/usr/local
+# Start REPL for interactive development
+gmake repl
 #+END_SRC
 
 * Usage
 
 ** Basic Example
 #+BEGIN_SRC scheme
-(use-modules (project-name core))
+(use-modules (core tensor)
+             (core tokenizer)
+             (core transformer))
 
-;; Example usage here
-(define result (process-data input))
-(display result)
+;; Create a simple tensor
+(define t (tensor-from-list '((1 2 3) (4 5 6))))
+(tensor-shape t) ; => (2 3)
+
+;; Initialize tokenizer and encode text
+(define tok (make-tokenizer))
+(define tokens (encode tok "Hello, Guile!"))
+
+;; Create a nano transformer model
+(define model (make-transformer gpt-nano-config))
+
+;; Generate text (after training)
+(generate-text model "Once upon a time" 50)
 #+END_SRC
 
 ** REPL Development
@@ -90,15 +115,17 @@ guile3 -L src/
 
 * Roadmap to v1.0.0
 
-** v0.1.0 - Core Foundation
-- [ ] Basic data structures implementation
-- [ ] Fundamental operations
-- [ ] Initial test framework
+** v0.1.0 - Core Foundation ✅
+- [X] Tensor operations with SRFI-4 arrays
+- [X] BPE tokenizer implementation
+- [X] Attention mechanisms
+- [X] Transformer architecture
+- [X] SRFI-64 test framework
 
-** v0.2.0 - Algorithm Implementation
-- [ ] Port main algorithms from chapters 1-3
-- [ ] Functional pattern establishment
-- [ ] Error handling framework
+** v0.2.0 - Training Infrastructure (Current)
+- [ ] Automatic differentiation
+- [ ] Backpropagation implementation
+- [ ] Optimizer algorithms (SGD, Adam)
 
 ** v0.3.0 - System Integration
 - [ ] Module interconnections
@@ -184,12 +211,41 @@ gmake docs-info
 
 This project is licensed under the MIT License. See LICENSE file for details.
 
+* Current Implementation Status
+
+** Completed Modules
+- ✅ `tensor.scm` - Efficient tensor operations with broadcasting
+- ✅ `tokenizer.scm` - BPE tokenization from scratch  
+- ✅ `attention.scm` - Scaled dot-product and multi-head attention
+- ✅ `transformer.scm` - Complete encoder/decoder architecture
+
+** Next Steps
+1. Implement automatic differentiation for backpropagation
+2. Add training loop with loss functions (cross-entropy, MSE)
+3. Create data loading pipeline for text datasets
+4. Build example models (GPT-nano for testing)
+5. Performance profiling and optimization
+
+* Contributing
+
+This project uses literate programming - all code is documented in `docs/*.org` files and tangled to generate the Scheme source. To contribute:
+
+1. Edit the relevant `.org` file in `docs/`
+2. Run `gmake tangle` to generate Scheme code
+3. Run `gmake test` to ensure tests pass
+4. Submit PR with both org and generated files
+
 * Acknowledgments
 
-- Original book: [BOOK_TITLE] by [AUTHOR]
+- Inspired by "Building LLMs from Scratch" approaches
 - Guile community for excellent documentation and support
 - FreeBSD project for a robust operating system
+- Collaborators: @jwalsh, @seanjensengrey, @aygp-dr
+
+* License
+
+MIT License - See LICENSE file for details.
 
 * Topics
 
-~guile~ ~scheme~ ~functional-programming~ ~[domain-specific]~ ~[book-concept]~ ~freebsd~ ~literate-programming~
+~guile~ ~scheme~ ~machine-learning~ ~transformer~ ~language-model~ ~literate-programming~ ~freebsd~ ~llm~
