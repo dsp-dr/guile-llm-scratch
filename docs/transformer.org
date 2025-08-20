@@ -1,0 +1,431 @@
+#+TITLE: Transformer Architecture Implementation
+#+PROPERTY: header-args:scheme :tangle ../src/core/transformer.scm :mkdirp t
+
+* Overview
+
+Complete transformer architecture implementation combining attention mechanisms,
+feed-forward networks, and layer normalization into encoder and decoder blocks.
+
+* Module Definition
+
+#+BEGIN_SRC scheme
+;;; transformer.scm --- Transformer model architecture
+;;; Commentary:
+;;; Implements transformer encoder/decoder blocks and full models
+
+(define-module (core transformer)
+  #:use-module (core tensor)
+  #:use-module (core attention)
+  #:use-module (core tokenizer)
+  #:use-module (ice-9 match)
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-26)
+  #:export (make-feed-forward
+            make-transformer-block
+            make-encoder
+            make-decoder
+            make-transformer
+            transformer?
+            forward-transformer
+            generate-text))
+#+END_SRC
+
+* Feed-Forward Network
+
+#+BEGIN_SRC scheme
+(define-record-type <feed-forward>
+  (%make-feed-forward w1 b1 w2 b2 d-model d-ff dropout)
+  feed-forward?
+  (w1 ff-w1)           ; First layer weights
+  (b1 ff-b1)           ; First layer bias
+  (w2 ff-w2)           ; Second layer weights
+  (b2 ff-b2)           ; Second layer bias
+  (d-model ff-d-model) ; Model dimension
+  (d-ff ff-d-ff)       ; Feed-forward dimension
+  (dropout ff-dropout)) ; Dropout rate
+
+(define (make-feed-forward d-model d-ff #:optional (dropout 0.1))
+  "Create a position-wise feed-forward network."
+  (%make-feed-forward
+   (tensor-random (list d-model d-ff) -0.1 0.1)
+   (tensor-zeros (list d-ff))
+   (tensor-random (list d-ff d-model) -0.1 0.1)
+   (tensor-zeros (list d-model))
+   d-model d-ff dropout))
+
+(define (relu tensor)
+  "ReLU activation function."
+  (let* ((data (tensor-data tensor))
+         (size (tensor-size tensor))
+         (result (tensor-zeros (tensor-shape tensor))))
+    (do ((i 0 (+ i 1)))
+        ((>= i size))
+      (f32vector-set! (tensor-data result) i
+                     (max 0.0 (f32vector-ref data i))))
+    result))
+
+(define (gelu tensor)
+  "GELU activation function."
+  (let* ((data (tensor-data tensor))
+         (size (tensor-size tensor))
+         (result (tensor-zeros (tensor-shape tensor))))
+    (do ((i 0 (+ i 1)))
+        ((>= i size))
+      (let ((x (f32vector-ref data i)))
+        (f32vector-set! (tensor-data result) i
+                       (* 0.5 x (+ 1.0 (tanh (* 0.7978845608
+                                               (+ x (* 0.044715 
+                                                     (expt x 3))))))))))
+    result))
+
+(define (forward-feed-forward ff input)
+  "Forward pass through feed-forward network."
+  ;; First linear transformation
+  (let* ((hidden (tensor-add (tensor-matmul input (ff-w1 ff))
+                            (tensor-broadcast (ff-b1 ff) 
+                                            (tensor-shape input))))
+         ;; Activation
+         (activated (gelu hidden))
+         ;; Second linear transformation
+         (output (tensor-add (tensor-matmul activated (ff-w2 ff))
+                           (tensor-broadcast (ff-b2 ff)
+                                           (tensor-shape input)))))
+    output))
+#+END_SRC
+
+* Transformer Block
+
+#+BEGIN_SRC scheme
+(define-record-type <transformer-block>
+  (%make-transformer-block attention ff norm1 norm2)
+  transformer-block?
+  (attention block-attention)     ; Multi-head attention
+  (ff block-ff)                  ; Feed-forward network
+  (norm1 block-norm1)            ; First layer norm
+  (norm2 block-norm2))           ; Second layer norm
+
+(define (make-transformer-block d-model n-heads d-ff #:optional (dropout 0.1))
+  "Create a transformer encoder/decoder block."
+  (%make-transformer-block
+   (make-multi-head-attention n-heads d-model)
+   (make-feed-forward d-model d-ff dropout)
+   (lambda (x) (layer-norm x 1e-6))
+   (lambda (x) (layer-norm x 1e-6))))
+
+(define (forward-block block input #:optional mask)
+  "Forward pass through transformer block."
+  ;; Self-attention with residual connection
+  (let* ((attn-output (forward-attention (block-attention block)
+                                        input input input mask))
+         (attn-residual (tensor-add input attn-output))
+         (norm1-output ((block-norm1 block) attn-residual))
+         
+         ;; Feed-forward with residual connection
+         (ff-output (forward-feed-forward (block-ff block) norm1-output))
+         (ff-residual (tensor-add norm1-output ff-output))
+         (output ((block-norm2 block) ff-residual)))
+    output))
+#+END_SRC
+
+* Encoder Stack
+
+#+BEGIN_SRC scheme
+(define-record-type <encoder>
+  (%make-encoder blocks n-layers d-model)
+  encoder?
+  (blocks encoder-blocks)      ; List of transformer blocks
+  (n-layers encoder-n-layers)  ; Number of layers
+  (d-model encoder-d-model))   ; Model dimension
+
+(define (make-encoder n-layers d-model n-heads d-ff)
+  "Create a transformer encoder stack."
+  (let ((blocks (map (lambda (i)
+                      (make-transformer-block d-model n-heads d-ff))
+                    (iota n-layers))))
+    (%make-encoder blocks n-layers d-model)))
+
+(define (forward-encoder encoder input #:optional mask)
+  "Forward pass through encoder stack."
+  (let loop ((blocks (encoder-blocks encoder))
+             (hidden input))
+    (if (null? blocks)
+        hidden
+        (loop (cdr blocks)
+              (forward-block (car blocks) hidden mask)))))
+#+END_SRC
+
+* Decoder Stack
+
+#+BEGIN_SRC scheme
+(define-record-type <decoder>
+  (%make-decoder blocks cross-attention n-layers d-model)
+  decoder?
+  (blocks decoder-blocks)              ; List of transformer blocks
+  (cross-attention decoder-cross-attn) ; Cross-attention layers
+  (n-layers decoder-n-layers)          ; Number of layers
+  (d-model decoder-d-model))           ; Model dimension
+
+(define (make-decoder n-layers d-model n-heads d-ff)
+  "Create a transformer decoder stack."
+  (let ((blocks (map (lambda (i)
+                      (make-transformer-block d-model n-heads d-ff))
+                    (iota n-layers)))
+        (cross-attn (map (lambda (i)
+                          (make-multi-head-attention n-heads d-model))
+                        (iota n-layers))))
+    (%make-decoder blocks cross-attn n-layers d-model)))
+
+(define (forward-decoder decoder input encoder-output 
+                        #:optional (self-mask #f) (cross-mask #f))
+  "Forward pass through decoder stack."
+  (let loop ((blocks (decoder-blocks decoder))
+             (cross-attns (decoder-cross-attn decoder))
+             (hidden input))
+    (if (null? blocks)
+        hidden
+        (let* (;; Self-attention
+               (self-attn-out (forward-block (car blocks) hidden self-mask))
+               ;; Cross-attention with encoder output
+               (cross-attn-out (forward-attention (car cross-attns)
+                                                 self-attn-out
+                                                 encoder-output
+                                                 encoder-output
+                                                 cross-mask))
+               ;; Add residual and normalize
+               (output (tensor-add self-attn-out cross-attn-out)))
+          (loop (cdr blocks)
+                (cdr cross-attns)
+                output)))))
+#+END_SRC
+
+* Complete Transformer Model
+
+#+BEGIN_SRC scheme
+(define-record-type <transformer>
+  (%make-transformer encoder decoder tokenizer embedding
+                    output-projection d-model vocab-size max-seq-len)
+  transformer?
+  (encoder transformer-encoder)         ; Encoder stack
+  (decoder transformer-decoder)         ; Decoder stack
+  (tokenizer transformer-tokenizer)     ; Tokenizer
+  (embedding transformer-embedding)     ; Embedding matrix
+  (output-projection transformer-output) ; Output projection
+  (d-model transformer-d-model)         ; Model dimension
+  (vocab-size transformer-vocab-size)   ; Vocabulary size
+  (max-seq-len transformer-max-seq))    ; Maximum sequence length
+
+(define (make-embedding vocab-size d-model)
+  "Create embedding matrix."
+  (tensor-random (list vocab-size d-model) -0.1 0.1))
+
+(define (embed-tokens embedding token-ids)
+  "Convert token IDs to embeddings."
+  (let* ((batch-size (car (tensor-shape token-ids)))
+         (seq-len (cadr (tensor-shape token-ids)))
+         (d-model (cadr (tensor-shape embedding)))
+         (result (tensor-zeros (list batch-size seq-len d-model))))
+    ;; Look up embeddings for each token
+    (do ((b 0 (+ b 1)))
+        ((>= b batch-size))
+      (do ((s 0 (+ s 1)))
+          ((>= s seq-len))
+        (let ((token-id (tensor-ref token-ids b s)))
+          ;; Copy embedding vector
+          (do ((d 0 (+ d 1)))
+              ((>= d d-model))
+            (tensor-set! result
+                        (tensor-ref embedding token-id d)
+                        b s d)))))
+    result))
+
+(define (make-transformer config)
+  "Create a complete transformer model from configuration."
+  (match config
+    ((('d-model . d-model)
+      ('n-heads . n-heads)
+      ('n-layers . n-layers)
+      ('d-ff . d-ff)
+      ('vocab-size . vocab-size)
+      ('max-seq-len . max-seq-len))
+     (let* ((tokenizer (make-tokenizer))
+            (encoder (make-encoder n-layers d-model n-heads d-ff))
+            (decoder (make-decoder n-layers d-model n-heads d-ff))
+            (embedding (make-embedding vocab-size d-model))
+            (output-proj (tensor-random (list d-model vocab-size) -0.1 0.1)))
+       (%make-transformer encoder decoder tokenizer embedding
+                         output-proj d-model vocab-size max-seq-len)))
+    (_ (error "Invalid transformer configuration"))))
+
+(define (forward-transformer transformer input-ids 
+                           #:optional (target-ids #f))
+  "Forward pass through complete transformer."
+  (let* ((src-embeddings (embed-tokens (transformer-embedding transformer)
+                                       input-ids))
+         (seq-len (cadr (tensor-shape input-ids)))
+         (pos-encoding (positional-encoding seq-len 
+                                           (transformer-d-model transformer)))
+         ;; Add positional encoding
+         (src-with-pos (tensor-add src-embeddings pos-encoding))
+         
+         ;; Encode
+         (encoder-output (forward-encoder (transformer-encoder transformer)
+                                         src-with-pos))
+         
+         ;; Decode if target provided
+         (output (if target-ids
+                    (let* ((tgt-embeddings (embed-tokens 
+                                          (transformer-embedding transformer)
+                                          target-ids))
+                           (tgt-with-pos (tensor-add tgt-embeddings 
+                                                    pos-encoding))
+                           (causal-mask (causal-mask seq-len))
+                           (decoder-output (forward-decoder 
+                                          (transformer-decoder transformer)
+                                          tgt-with-pos
+                                          encoder-output
+                                          causal-mask)))
+                      ;; Project to vocabulary
+                      (tensor-matmul decoder-output
+                                   (transformer-output transformer)))
+                    encoder-output)))
+    output))
+#+END_SRC
+
+* Text Generation
+
+#+BEGIN_SRC scheme
+(define (generate-text transformer prompt max-length 
+                      #:optional (temperature 1.0))
+  "Generate text from a prompt using the transformer."
+  (let* ((tokenizer (transformer-tokenizer transformer))
+         (input-tokens (encode tokenizer prompt))
+         (generated input-tokens))
+    
+    (do ((i 0 (+ i 1)))
+        ((or (>= i max-length)
+             (member (last generated) '(259)))) ; EOS token
+      
+      ;; Create input tensor
+      (let* ((input-tensor (tensor-from-list (list generated)))
+             (output (forward-transformer transformer input-tensor))
+             ;; Get logits for last position
+             (last-logits (tensor-slice output 
+                                       (list 0 (- (length generated) 1) 0)
+                                       (list 1 (length generated) 
+                                            (transformer-vocab-size transformer))))
+             ;; Apply temperature
+             (scaled-logits (if (= temperature 1.0)
+                               last-logits
+                               (tensor-divide last-logits
+                                            (tensor-ones (tensor-shape last-logits)))))
+             ;; Apply softmax
+             (probs (softmax scaled-logits))
+             ;; Sample next token
+             (next-token (sample-from-distribution probs)))
+        
+        (set! generated (append generated (list next-token)))))
+    
+    ;; Decode back to text
+    (decode tokenizer generated)))
+
+(define (sample-from-distribution probs)
+  "Sample token ID from probability distribution."
+  (let ((r (random:uniform))
+        (cumsum 0.0)
+        (data (tensor-data probs)))
+    (let loop ((i 0))
+      (set! cumsum (+ cumsum (f32vector-ref data i)))
+      (if (or (>= cumsum r) (>= i (- (f32vector-length data) 1)))
+          i
+          (loop (+ i 1))))))
+#+END_SRC
+
+* Configuration Presets
+
+#+BEGIN_SRC scheme
+(define gpt-nano-config
+  "Configuration for a tiny GPT model."
+  '((d-model . 128)
+    (n-heads . 4)
+    (n-layers . 2)
+    (d-ff . 512)
+    (vocab-size . 1000)
+    (max-seq-len . 128)))
+
+(define gpt-small-config
+  "Configuration for a small GPT model."
+  '((d-model . 256)
+    (n-heads . 8)
+    (n-layers . 4)
+    (d-ff . 1024)
+    (vocab-size . 5000)
+    (max-seq-len . 256)))
+
+(define gpt-medium-config
+  "Configuration for a medium GPT model."
+  '((d-model . 512)
+    (n-heads . 8)
+    (n-layers . 6)
+    (d-ff . 2048)
+    (vocab-size . 10000)
+    (max-seq-len . 512)))
+#+END_SRC
+
+* Tests
+
+#+BEGIN_SRC scheme :tangle ../tests/core/transformer-test.scm
+;;; transformer-test.scm --- Tests for transformer architecture
+
+(define-module (tests core transformer-test)
+  #:use-module (srfi srfi-64)
+  #:use-module (core tensor)
+  #:use-module (core attention)
+  #:use-module (core transformer))
+
+(test-begin "transformer")
+
+(test-group "Feed-Forward Network"
+  (let ((ff (make-feed-forward 16 64)))
+    (test-assert "Create feed-forward"
+      (feed-forward? ff))
+    
+    (test-equal "Feed-forward dimensions"
+      '(16 64)
+      (list (ff-d-model ff) (ff-d-ff ff)))))
+
+(test-group "Transformer Block"
+  (let ((block (make-transformer-block 16 4 64)))
+    (test-assert "Create transformer block"
+      (transformer-block? block))
+    
+    (let ((input (tensor-random '(1 10 16))))
+      (test-assert "Forward through block"
+        (tensor? (forward-block block input))))))
+
+(test-group "Encoder"
+  (let ((encoder (make-encoder 2 16 4 64)))
+    (test-assert "Create encoder"
+      (encoder? encoder))
+    
+    (test-equal "Encoder layers"
+      2
+      (encoder-n-layers encoder))))
+
+(test-group "Complete Transformer"
+  (let ((config '((d-model . 32)
+                  (n-heads . 4)
+                  (n-layers . 2)
+                  (d-ff . 128)
+                  (vocab-size . 100)
+                  (max-seq-len . 16))))
+    (test-assert "Create transformer from config"
+      (transformer? (make-transformer config)))
+    
+    (let ((model (make-transformer config))
+          (input (tensor-from-list '((1 2 3 4 5)))))
+      (test-assert "Forward pass"
+        (tensor? (forward-transformer model input))))))
+
+(test-end "transformer")
+#+END_SRC

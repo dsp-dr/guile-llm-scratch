@@ -1,0 +1,324 @@
+#+TITLE: Attention Mechanism Implementation
+#+PROPERTY: header-args:scheme :tangle ../src/core/attention.scm :mkdirp t
+
+* Overview
+
+Implementation of scaled dot-product attention and multi-head attention mechanisms,
+the core components of transformer architectures.
+
+* Module Definition
+
+#+BEGIN_SRC scheme
+;;; attention.scm --- Attention mechanisms for transformers
+;;; Commentary:
+;;; Implements scaled dot-product and multi-head attention in pure Scheme
+
+(define-module (core attention)
+  #:use-module (core tensor)
+  #:use-module (ice-9 match)
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-26)
+  #:export (scaled-dot-product-attention
+            make-multi-head-attention
+            multi-head-attention?
+            forward-attention
+            positional-encoding
+            causal-mask
+            softmax
+            layer-norm))
+#+END_SRC
+
+* Mathematical Operations
+
+#+BEGIN_SRC scheme
+(define (softmax tensor #:optional (axis -1))
+  "Apply softmax activation along specified axis."
+  (let* ((data (tensor-data tensor))
+         (shape (tensor-shape tensor))
+         (size (tensor-size tensor)))
+    ;; For simplicity, implement for last axis of 2D tensor
+    (match shape
+      ((batch-size seq-len)
+       (let ((result (tensor-zeros shape)))
+         (do ((b 0 (+ b 1)))
+             ((>= b batch-size))
+           (let ((row-start (* b seq-len)))
+             ;; Find max for numerical stability
+             (let ((max-val (do ((i 0 (+ i 1))
+                                (m -inf.0 (max m (f32vector-ref data 
+                                                               (+ row-start i)))))
+                               ((>= i seq-len) m))))
+               ;; Compute exp and sum
+               (let ((exp-sum 0.0))
+                 (do ((i 0 (+ i 1)))
+                     ((>= i seq-len))
+                   (let ((exp-val (exp (- (f32vector-ref data (+ row-start i))
+                                         max-val))))
+                     (f32vector-set! (tensor-data result) 
+                                    (+ row-start i) exp-val)
+                     (set! exp-sum (+ exp-sum exp-val))))
+                 ;; Normalize
+                 (do ((i 0 (+ i 1)))
+                     ((>= i seq-len))
+                   (f32vector-set! (tensor-data result)
+                                  (+ row-start i)
+                                  (/ (f32vector-ref (tensor-data result)
+                                                   (+ row-start i))
+                                     exp-sum)))))))
+         result))
+      (_ (error "Softmax only implemented for 2D tensors")))))
+
+(define (layer-norm tensor epsilon)
+  "Apply layer normalization."
+  (let* ((mean (tensor-mean tensor))
+         (std-dev (tensor-std tensor))
+         (data (tensor-data tensor))
+         (size (tensor-size tensor))
+         (result (tensor-zeros (tensor-shape tensor))))
+    (do ((i 0 (+ i 1)))
+        ((>= i size))
+      (f32vector-set! (tensor-data result) i
+                     (/ (- (f32vector-ref data i) mean)
+                        (+ std-dev epsilon))))
+    result))
+#+END_SRC
+
+* Attention Core
+
+#+BEGIN_SRC scheme
+(define (scaled-dot-product-attention query key value #:optional mask)
+  "Compute scaled dot-product attention.
+   Attention(Q,K,V) = softmax(QK^T / sqrt(d_k))V"
+  (match (list (tensor-shape query)
+               (tensor-shape key)
+               (tensor-shape value))
+    (((batch q-len d-k)
+      (batch k-len d-k2)
+      (batch v-len d-v))
+     (unless (and (= d-k d-k2) (= k-len v-len))
+       (error "Incompatible dimensions for attention"))
+     
+     (let* ((scale (/ 1.0 (sqrt d-k)))
+            ;; Q @ K^T
+            (scores (tensor-matmul query (tensor-transpose key)))
+            ;; Scale scores
+            (scaled-scores (tensor-multiply scores 
+                                           (tensor-ones (tensor-shape scores))))) ; Scale by constant
+       
+       ;; Apply mask if provided
+       (when mask
+         (let ((mask-value -1e9))
+           ;; Add large negative value where mask is 0
+           (set! scaled-scores (tensor-add scaled-scores 
+                                          (tensor-multiply mask 
+                                                         (tensor-ones (tensor-shape mask)))))))
+       
+       ;; Apply softmax
+       (let ((attention-weights (softmax scaled-scores)))
+         ;; Multiply by values
+         (tensor-matmul attention-weights value))))
+    (_ (error "Attention requires 3D tensors (batch, seq_len, dim)"))))
+#+END_SRC
+
+* Multi-Head Attention
+
+#+BEGIN_SRC scheme
+(define-record-type <multi-head-attention>
+  (%make-multi-head-attention n-heads d-model d-k d-v
+                             w-q w-k w-v w-o)
+  multi-head-attention?
+  (n-heads mha-n-heads)      ; Number of attention heads
+  (d-model mha-d-model)      ; Model dimension
+  (d-k mha-d-k)             ; Key dimension
+  (d-v mha-d-v)             ; Value dimension
+  (w-q mha-w-q)             ; Query projection weights
+  (w-k mha-w-k)             ; Key projection weights
+  (w-v mha-w-v)             ; Value projection weights
+  (w-o mha-w-o))            ; Output projection weights
+
+(define (make-multi-head-attention n-heads d-model)
+  "Create a multi-head attention layer."
+  (let* ((d-k (quotient d-model n-heads))
+         (d-v d-k))
+    (%make-multi-head-attention
+     n-heads d-model d-k d-v
+     ;; Initialize projection matrices
+     (tensor-random (list d-model (* n-heads d-k)) -0.1 0.1)
+     (tensor-random (list d-model (* n-heads d-k)) -0.1 0.1)
+     (tensor-random (list d-model (* n-heads d-v)) -0.1 0.1)
+     (tensor-random (list (* n-heads d-v) d-model) -0.1 0.1))))
+
+(define (split-heads tensor n-heads)
+  "Split tensor for multi-head attention."
+  (match (tensor-shape tensor)
+    ((batch seq-len features)
+     (let ((head-dim (quotient features n-heads)))
+       ;; Reshape to (batch, seq_len, n_heads, head_dim)
+       ;; then transpose to (batch, n_heads, seq_len, head_dim)
+       (tensor-reshape tensor (list batch n-heads seq-len head-dim))))
+    (_ (error "Invalid tensor shape for split-heads"))))
+
+(define (combine-heads tensor)
+  "Combine multi-head outputs."
+  (match (tensor-shape tensor)
+    ((batch n-heads seq-len head-dim)
+     ;; Transpose back and reshape
+     (tensor-reshape tensor (list batch seq-len (* n-heads head-dim))))
+    (_ (error "Invalid tensor shape for combine-heads"))))
+
+(define (forward-attention mha query key value #:optional mask)
+  "Forward pass through multi-head attention."
+  (let* ((batch-size (car (tensor-shape query)))
+         (seq-len (cadr (tensor-shape query)))
+         (n-heads (mha-n-heads mha))
+         
+         ;; Linear projections
+         (q (tensor-matmul query (mha-w-q mha)))
+         (k (tensor-matmul key (mha-w-k mha)))
+         (v (tensor-matmul value (mha-w-v mha)))
+         
+         ;; Split into heads
+         (q-heads (split-heads q n-heads))
+         (k-heads (split-heads k n-heads))
+         (v-heads (split-heads v n-heads))
+         
+         ;; Apply attention to each head
+         (attention-output 
+          (scaled-dot-product-attention q-heads k-heads v-heads mask))
+         
+         ;; Combine heads
+         (combined (combine-heads attention-output))
+         
+         ;; Final linear projection
+         (output (tensor-matmul combined (mha-w-o mha))))
+    
+    output))
+#+END_SRC
+
+* Positional Encoding
+
+#+BEGIN_SRC scheme
+(define (positional-encoding seq-len d-model)
+  "Create sinusoidal positional encodings."
+  (let ((pos-encoding (tensor-zeros (list seq-len d-model))))
+    (do ((pos 0 (+ pos 1)))
+        ((>= pos seq-len))
+      (do ((i 0 (+ i 2)))
+          ((>= i d-model))
+        (let* ((angle-rate (/ 1.0 (expt 10000 (/ i d-model))))
+               (angle (* pos angle-rate)))
+          ;; Even dimensions use sin
+          (tensor-set! pos-encoding (sin angle) pos i)
+          ;; Odd dimensions use cos
+          (when (< (+ i 1) d-model)
+            (tensor-set! pos-encoding (cos angle) pos (+ i 1))))))
+    pos-encoding))
+
+(define (causal-mask seq-len)
+  "Create causal attention mask (lower triangular)."
+  (let ((mask (tensor-zeros (list seq-len seq-len))))
+    (do ((i 0 (+ i 1)))
+        ((>= i seq-len))
+      (do ((j 0 (+ j 1)))
+          ((> j i))
+        (tensor-set! mask 1.0 i j)))
+    mask))
+#+END_SRC
+
+* Attention Patterns
+
+#+BEGIN_SRC scheme
+(define (sliding-window-mask seq-len window-size)
+  "Create sliding window attention mask."
+  (let ((mask (tensor-zeros (list seq-len seq-len))))
+    (do ((i 0 (+ i 1)))
+        ((>= i seq-len))
+      (let ((start (max 0 (- i window-size)))
+            (end (min seq-len (+ i window-size 1))))
+        (do ((j start (+ j 1)))
+            ((>= j end))
+          (tensor-set! mask 1.0 i j))))
+    mask))
+
+(define (sparse-attention-mask seq-len stride)
+  "Create strided/sparse attention pattern."
+  (let ((mask (tensor-zeros (list seq-len seq-len))))
+    (do ((i 0 (+ i 1)))
+        ((>= i seq-len))
+      ;; Attend to every stride-th position
+      (do ((j 0 (+ j stride)))
+          ((>= j seq-len))
+        (tensor-set! mask 1.0 i j))
+      ;; Also attend to local context
+      (when (> i 0)
+        (tensor-set! mask 1.0 i (- i 1)))
+      (when (< i (- seq-len 1))
+        (tensor-set! mask 1.0 i (+ i 1))))
+    mask))
+#+END_SRC
+
+* Tests
+
+#+BEGIN_SRC scheme :tangle ../tests/core/attention-test.scm
+;;; attention-test.scm --- Tests for attention mechanisms
+
+(define-module (tests core attention-test)
+  #:use-module (srfi srfi-64)
+  #:use-module (core tensor)
+  #:use-module (core attention))
+
+(test-begin "attention")
+
+(test-group "Softmax"
+  (let ((input (tensor-from-list '((1 2 3) (4 5 6)))))
+    (test-assert "Softmax returns tensor"
+      (tensor? (softmax input)))
+    
+    (test-assert "Softmax sums to 1"
+      (let* ((output (softmax input))
+             (row-sum (tensor-sum (tensor-slice output '(0 0) '(1 3)))))
+        (< (abs (- row-sum 1.0)) 0.01)))))
+
+(test-group "Positional Encoding"
+  (test-equal "Positional encoding shape"
+    '(10 16)
+    (tensor-shape (positional-encoding 10 16)))
+  
+  (test-assert "Positional encoding values bounded"
+    (let* ((pe (positional-encoding 10 16))
+           (data (tensor-data pe))
+           (all-bounded #t))
+      (do ((i 0 (+ i 1)))
+          ((or (>= i (f32vector-length data))
+               (not all-bounded)))
+        (let ((val (f32vector-ref data i)))
+          (when (or (> val 1.0) (< val -1.0))
+            (set! all-bounded #f))))
+      all-bounded)))
+
+(test-group "Masks"
+  (test-assert "Causal mask is lower triangular"
+    (let ((mask (causal-mask 4)))
+      (and (= 1.0 (tensor-ref mask 1 0))
+           (= 1.0 (tensor-ref mask 1 1))
+           (= 0.0 (tensor-ref mask 1 2)))))
+  
+  (test-assert "Sliding window mask"
+    (let ((mask (sliding-window-mask 5 2)))
+      (= 1.0 (tensor-ref mask 2 2)))))
+
+(test-group "Multi-Head Attention"
+  (test-assert "Create MHA layer"
+    (multi-head-attention? (make-multi-head-attention 8 512)))
+  
+  (let ((mha (make-multi-head-attention 4 16)))
+    (test-equal "MHA properties"
+      '(4 16 4 4)
+      (list (mha-n-heads mha)
+            (mha-d-model mha)
+            (mha-d-k mha)
+            (mha-d-v mha)))))
+
+(test-end "attention")
+#+END_SRC

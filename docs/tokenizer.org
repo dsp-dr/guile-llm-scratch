@@ -1,0 +1,323 @@
+#+TITLE: Tokenizer Module - BPE Implementation
+#+PROPERTY: header-args:scheme :tangle ../src/core/tokenizer.scm :mkdirp t
+
+* Overview
+
+Implementation of Byte-Pair Encoding (BPE) tokenizer for LLM text processing.
+This provides the foundation for converting text to numerical representations.
+
+* Module Definition
+
+#+BEGIN_SRC scheme
+;;; tokenizer.scm --- BPE tokenizer for text processing
+;;; Commentary:
+;;; Pure Scheme implementation of Byte-Pair Encoding tokenization
+
+(define-module (core tokenizer)
+  #:use-module (ice-9 match)
+  #:use-module (ice-9 hash-table)
+  #:use-module (ice-9 textual-ports)
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-26)
+  #:use-module (srfi srfi-69) ; Hash tables
+  #:export (make-tokenizer
+            tokenizer?
+            tokenizer-vocab
+            tokenizer-merges
+            train-bpe
+            encode
+            decode
+            get-vocab-size
+            save-tokenizer
+            load-tokenizer))
+#+END_SRC
+
+* Data Structures
+
+#+BEGIN_SRC scheme
+(define-record-type <tokenizer>
+  (%make-tokenizer vocab merges special-tokens)
+  tokenizer?
+  (vocab tokenizer-vocab)                ; Hash: token -> id
+  (merges tokenizer-merges)              ; List of merge rules
+  (special-tokens tokenizer-special-tokens)) ; Special tokens
+
+(define (make-tokenizer)
+  "Create a basic tokenizer with byte-level vocabulary."
+  (let ((vocab (make-hash-table)))
+    ;; Initialize with byte tokens (0-255)
+    (do ((i 0 (+ i 1)))
+        ((> i 255))
+      (hash-set! vocab (string (integer->char i)) i))
+    (%make-tokenizer vocab '() 
+                    '(("<PAD>" . 256)
+                      ("<UNK>" . 257)
+                      ("<BOS>" . 258)
+                      ("<EOS>" . 259)))))
+
+(define (get-vocab-size tokenizer)
+  "Get the size of the vocabulary."
+  (hash-count (const #t) (tokenizer-vocab tokenizer)))
+#+END_SRC
+
+* BPE Training
+
+#+BEGIN_SRC scheme
+(define (get-byte-pairs text)
+  "Get all adjacent byte pairs from text."
+  (let ((chars (string->list text)))
+    (if (< (length chars) 2)
+        '()
+        (map (lambda (i)
+               (cons (list-ref chars i)
+                     (list-ref chars (+ i 1))))
+             (iota (- (length chars) 1))))))
+
+(define (count-pairs texts)
+  "Count frequency of all byte pairs in texts."
+  (let ((pair-counts (make-hash-table)))
+    (for-each
+     (lambda (text)
+       (for-each
+        (lambda (pair)
+          (hash-set! pair-counts pair
+                    (+ 1 (hash-ref pair-counts pair 0))))
+        (get-byte-pairs text)))
+     texts)
+    pair-counts))
+
+(define (most-frequent-pair pair-counts)
+  "Find the most frequent pair."
+  (let ((max-pair #f)
+        (max-count 0))
+    (hash-for-each
+     (lambda (pair count)
+       (when (> count max-count)
+         (set! max-pair pair)
+         (set! max-count count)))
+     pair-counts)
+    (cons max-pair max-count)))
+
+(define (merge-pair texts pair new-token)
+  "Merge a pair into a new token across all texts."
+  (map (lambda (text)
+         (let* ((chars (string->list text))
+                (merged '()))
+           (let loop ((remaining chars))
+             (cond
+              ((null? remaining) 
+               (list->string (reverse merged)))
+              ((null? (cdr remaining))
+               (list->string (reverse (cons (car remaining) merged))))
+              ((and (equal? (car remaining) (car pair))
+                    (equal? (cadr remaining) (cdr pair)))
+               (loop (cons new-token (cddr remaining))))
+              (else
+               (loop (cdr remaining))
+               (set! merged (cons (car remaining) merged)))))))
+       texts))
+
+(define (train-bpe texts num-merges)
+  "Train BPE tokenizer on texts with specified number of merges."
+  (let ((tokenizer (make-tokenizer))
+        (working-texts texts)
+        (merges '()))
+    
+    (do ((i 0 (+ i 1)))
+        ((>= i num-merges))
+      (let* ((pair-counts (count-pairs working-texts))
+             (best-pair-info (most-frequent-pair pair-counts)))
+        (when (car best-pair-info)
+          (let* ((best-pair (car best-pair-info))
+                 (new-token-id (+ 260 i)) ; After special tokens
+                 (new-token (string-append 
+                           (string (car best-pair))
+                           (string (cdr best-pair)))))
+            ;; Add to vocabulary
+            (hash-set! (tokenizer-vocab tokenizer) new-token new-token-id)
+            ;; Record merge
+            (set! merges (cons (cons best-pair new-token) merges))
+            ;; Apply merge to texts
+            (set! working-texts (merge-pair working-texts best-pair 
+                                           (integer->char new-token-id)))
+            (format #t "Merge ~a: ~a + ~a -> ~a (count: ~a)~%"
+                   i (car best-pair) (cdr best-pair) 
+                   new-token (cdr best-pair-info))))))
+    
+    (%make-tokenizer (tokenizer-vocab tokenizer)
+                    (reverse merges)
+                    (tokenizer-special-tokens tokenizer))))
+#+END_SRC
+
+* Encoding and Decoding
+
+#+BEGIN_SRC scheme
+(define (encode tokenizer text)
+  "Encode text into token IDs."
+  (let ((vocab (tokenizer-vocab tokenizer))
+        (merges (tokenizer-merges tokenizer)))
+    
+    ;; Start with byte-level encoding
+    (let ((tokens (map (lambda (c)
+                        (hash-ref vocab (string c) 
+                                 (hash-ref vocab "<UNK>")))
+                      (string->list text))))
+      
+      ;; Apply merges in order
+      (for-each
+       (lambda (merge)
+         (let ((pair (car merge))
+               (new-token (cdr merge)))
+           ;; Apply this merge throughout the token sequence
+           (let loop ((remaining tokens)
+                      (result '()))
+             (cond
+              ((null? remaining)
+               (set! tokens (reverse result)))
+              ((and (not (null? (cdr remaining)))
+                    (= (car remaining) (hash-ref vocab (string (car pair))))
+                    (= (cadr remaining) (hash-ref vocab (string (cdr pair)))))
+               (loop (cddr remaining)
+                     (cons (hash-ref vocab new-token) result)))
+              (else
+               (loop (cdr remaining)
+                     (cons (car remaining) result)))))))
+       merges)
+      
+      tokens)))
+
+(define (decode tokenizer token-ids)
+  "Decode token IDs back to text."
+  (let ((inverse-vocab (make-hash-table)))
+    ;; Build inverse vocabulary
+    (hash-for-each
+     (lambda (token id)
+       (hash-set! inverse-vocab id token))
+     (tokenizer-vocab tokenizer))
+    
+    ;; Convert IDs to text
+    (string-concatenate
+     (map (lambda (id)
+           (hash-ref inverse-vocab id ""))
+          token-ids))))
+#+END_SRC
+
+* Persistence
+
+#+BEGIN_SRC scheme
+(define (save-tokenizer tokenizer filename)
+  "Save tokenizer to file."
+  (call-with-output-file filename
+    (lambda (port)
+      (write `((vocab . ,(hash-map->list cons (tokenizer-vocab tokenizer)))
+               (merges . ,(tokenizer-merges tokenizer))
+               (special-tokens . ,(tokenizer-special-tokens tokenizer)))
+             port))))
+
+(define (load-tokenizer filename)
+  "Load tokenizer from file."
+  (call-with-input-file filename
+    (lambda (port)
+      (let* ((data (read port))
+             (vocab-list (assoc-ref data 'vocab))
+             (merges (assoc-ref data 'merges))
+             (special-tokens (assoc-ref data 'special-tokens))
+             (vocab (make-hash-table)))
+        ;; Rebuild hash table
+        (for-each (lambda (pair)
+                   (hash-set! vocab (car pair) (cdr pair)))
+                 vocab-list)
+        (%make-tokenizer vocab merges special-tokens)))))
+#+END_SRC
+
+* Utilities
+
+#+BEGIN_SRC scheme
+(define (tokenize-words text)
+  "Basic word-level tokenization (pre-BPE)."
+  (let ((words '())
+        (current-word '()))
+    (string-for-each
+     (lambda (char)
+       (if (char-whitespace? char)
+           (unless (null? current-word)
+             (set! words (cons (list->string (reverse current-word)) words))
+             (set! current-word '()))
+           (set! current-word (cons char current-word))))
+     text)
+    (unless (null? current-word)
+      (set! words (cons (list->string (reverse current-word)) words)))
+    (reverse words)))
+
+(define (get-token-statistics tokenizer texts)
+  "Get statistics about tokenization."
+  (let ((total-chars 0)
+        (total-tokens 0))
+    (for-each
+     (lambda (text)
+       (set! total-chars (+ total-chars (string-length text)))
+       (set! total-tokens (+ total-tokens 
+                           (length (encode tokenizer text)))))
+     texts)
+    `((total-chars . ,total-chars)
+      (total-tokens . ,total-tokens)
+      (compression-ratio . ,(/ total-chars total-tokens))
+      (vocab-size . ,(get-vocab-size tokenizer)))))
+#+END_SRC
+
+* Tests
+
+#+BEGIN_SRC scheme :tangle ../tests/core/tokenizer-test.scm
+;;; tokenizer-test.scm --- Tests for BPE tokenizer
+
+(define-module (tests core tokenizer-test)
+  #:use-module (srfi srfi-64)
+  #:use-module (core tokenizer))
+
+(test-begin "tokenizer")
+
+(test-group "Basic Tokenizer"
+  (test-assert "Create tokenizer"
+    (tokenizer? (make-tokenizer)))
+  
+  (test-equal "Initial vocab size"
+    260  ; 256 bytes + 4 special tokens
+    (get-vocab-size (make-tokenizer))))
+
+(test-group "BPE Training"
+  (let* ((texts '("the cat" "the dog" "the cat sat"))
+         (tokenizer (train-bpe texts 10)))
+    
+    (test-assert "Trained tokenizer"
+      (tokenizer? tokenizer))
+    
+    (test-assert "Vocab grew after training"
+      (> (get-vocab-size tokenizer) 260))))
+
+(test-group "Encoding and Decoding"
+  (let* ((tokenizer (make-tokenizer))
+         (text "hello"))
+    
+    (test-assert "Encode returns list"
+      (list? (encode tokenizer text)))
+    
+    (test-equal "Round-trip encoding"
+      text
+      (decode tokenizer (encode tokenizer text)))))
+
+(test-group "Persistence"
+  (let ((tokenizer (make-tokenizer))
+        (temp-file "/tmp/test-tokenizer.scm"))
+    
+    (save-tokenizer tokenizer temp-file)
+    
+    (test-assert "Load saved tokenizer"
+      (tokenizer? (load-tokenizer temp-file)))
+    
+    (test-equal "Loaded tokenizer has same vocab size"
+      (get-vocab-size tokenizer)
+      (get-vocab-size (load-tokenizer temp-file)))))
+
+(test-end "tokenizer")
+#+END_SRC
