@@ -1,0 +1,76 @@
+# Guile compiled files
+*.go
+*.zo
+*.fasl
+
+# Build directories
+/build/
+/dist/
+
+# Backup files
+*~
+\#*\#
+.\#*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files
+.envrc.local
+.env
+
+# Documentation build
+/docs/*.html
+/docs/*.pdf
+/docs/*.info
+/docs/*.tex
+/docs/*.texi
+
+# Temporary files
+/tmp/
+*.tmp
+*.log
+
+# Test artifacts
+/test-results/
+*.coverage
+
+# Dependencies (if using package managers)
+/node_modules/
+/vendor/
+
+# Guix
+/guix-profile
+/.guix-channel
+
+# Book PDFs (not to be committed)
+/tmp/*.pdf
+/tmp/*.epub
+/tmp/*.html
+
+# Generated from org-mode
+/src/**/*.scm
+/tests/**/*.scm
+# Exception: Allow example files for reference
+!/src/core/.gitkeep
+!/tests/core/.gitkeep
+
+# Emacs org-mode
+*.org_archive
+/docs/ltximg/
+/docs/*.png
+
+# REPL history
+.guile_history
+.guile-repl-history
+
+# Cache
+.cache/
+__pycache__/

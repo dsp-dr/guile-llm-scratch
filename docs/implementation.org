@@ -1,0 +1,355 @@
+#+TITLE: [Module Name] Implementation
+#+PROPERTY: header-args:scheme :tangle ../src/core/example.scm :mkdirp t
+#+PROPERTY: header-args:mermaid :exports results :results file
+
+* Overview
+
+This document provides a literate programming implementation of [module description].
+The code is tangled to generate the actual Scheme source files.
+
+** Architecture
+
+#+BEGIN_SRC mermaid :file module-architecture.png
+graph LR
+    subgraph "Module Structure"
+        A[Input] --> B[Parser]
+        B --> C[Processor]
+        C --> D[Output]
+    end
+    
+    subgraph "Data Flow"
+        E[Raw Data] --> F[Validated Data]
+        F --> G[Transformed Data]
+        G --> H[Result]
+    end
+    
+    D --> H
+#+END_SRC
+
+* Module Definition
+
+#+BEGIN_SRC scheme
+;;; example.scm --- Example module implementation
+;;; Commentary:
+;;; This module demonstrates the literate programming approach
+;;; for implementing book concepts in Guile3.
+
+(define-module (core example)
+  #:use-module (ice-9 match)
+  #:use-module (ice-9 format)
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-26)
+  #:export (make-example
+            example?
+            example-data
+            process-example
+            transform-data))
+#+END_SRC
+
+* Data Structures
+
+** Record Type Definition
+
+We define our core data structure using SRFI-9 records:
+
+#+BEGIN_SRC scheme
+;; Define the example record type
+(define-record-type <example>
+  (make-example data metadata)
+  example?
+  (data example-data example-set-data!)
+  (metadata example-metadata example-set-metadata!))
+#+END_SRC
+
+** Helper Functions
+
+#+BEGIN_SRC scheme
+(define (create-example data)
+  "Create a new example with default metadata."
+  (make-example data '()))
+
+(define (example-with-metadata example key value)
+  "Return a new example with updated metadata."
+  (let ((new-example (make-example 
+                      (example-data example)
+                      (example-metadata example))))
+    (example-set-metadata! 
+     new-example 
+     (acons key value (example-metadata new-example)))
+    new-example))
+#+END_SRC
+
+* Core Algorithms
+
+** Data Processing
+
+The main processing function demonstrates functional composition:
+
+#+BEGIN_SRC scheme
+(define (process-example example)
+  "Process an example through the transformation pipeline."
+  (match example
+    (($ <example> data metadata)
+     (let* ((validated (validate-data data))
+            (transformed (transform-data validated))
+            (result (apply-rules transformed metadata)))
+       (make-example result 
+                    (acons 'processed #t metadata))))
+    (_ (error "Invalid example object"))))
+#+END_SRC
+
+** Data Validation
+
+#+BEGIN_SRC scheme
+(define (validate-data data)
+  "Validate input data according to business rules."
+  (cond
+   ((null? data) 
+    (error "Data cannot be empty"))
+   ((not (list? data))
+    (error "Data must be a list"))
+   (else 
+    (filter valid-datum? data))))
+
+(define (valid-datum? datum)
+  "Check if a single datum is valid."
+  (and (not (null? datum))
+       (or (number? datum)
+           (string? datum)
+           (symbol? datum))))
+#+END_SRC
+
+** Data Transformation
+
+#+BEGIN_SRC scheme
+(define (transform-data data)
+  "Apply transformation rules to validated data."
+  (map (lambda (item)
+         (cond
+          ((number? item) (* item 2))
+          ((string? item) (string-upcase item))
+          ((symbol? item) (symbol->string item))
+          (else item)))
+       data))
+#+END_SRC
+
+** Rule Application
+
+#+BEGIN_SRC scheme
+(define (apply-rules data metadata)
+  "Apply metadata-driven rules to transformed data."
+  (let ((rules (assoc-ref metadata 'rules)))
+    (if rules
+        (fold (lambda (rule result)
+                (apply-single-rule rule result))
+              data
+              rules)
+        data)))
+
+(define (apply-single-rule rule data)
+  "Apply a single rule to the data."
+  (match rule
+    (('filter . pred) (filter pred data))
+    (('map . func) (map func data))
+    (('sort . comp) (sort data comp))
+    (_ data)))
+#+END_SRC
+
+* Advanced Features
+
+** Memoization
+
+For expensive computations, we implement memoization:
+
+#+BEGIN_SRC scheme
+(define memoize
+  (lambda (f)
+    "Return a memoized version of function f."
+    (let ((cache (make-hash-table)))
+      (lambda args
+        (let ((cached-value (hash-ref cache args)))
+          (if cached-value
+              cached-value
+              (let ((result (apply f args)))
+                (hash-set! cache args result)
+                result)))))))
+
+;; Memoized version of expensive computation
+(define process-example-memoized
+  (memoize process-example))
+#+END_SRC
+
+** Error Handling with Continuations
+
+#+BEGIN_SRC scheme
+(define (safe-process-example example)
+  "Process example with error handling using continuations."
+  (call-with-current-continuation
+   (lambda (return)
+     (with-exception-handler
+      (lambda (exn)
+        (format #t "Error processing: ~a~%" exn)
+        (return #f))
+      (lambda ()
+        (process-example example))
+      #:unwind? #t))))
+#+END_SRC
+
+* Utility Functions
+
+** Pretty Printing
+
+#+BEGIN_SRC scheme
+(define (pp-example example)
+  "Pretty print an example object."
+  (match example
+    (($ <example> data metadata)
+     (format #t "Example:~%")
+     (format #t "  Data: ~s~%" data)
+     (format #t "  Metadata:~%")
+     (for-each (lambda (pair)
+                 (format #t "    ~a: ~s~%" 
+                        (car pair) (cdr pair)))
+               metadata))
+    (_ (format #t "Not an example object: ~s~%" example))))
+#+END_SRC
+
+** Serialization
+
+#+BEGIN_SRC scheme
+(define (example->alist example)
+  "Convert an example to an association list."
+  (match example
+    (($ <example> data metadata)
+     `((data . ,data)
+       (metadata . ,metadata)))
+    (_ '())))
+
+(define (alist->example alist)
+  "Convert an association list to an example."
+  (let ((data (assoc-ref alist 'data))
+        (metadata (assoc-ref alist 'metadata)))
+    (if (and data metadata)
+        (make-example data metadata)
+        (error "Invalid alist for example conversion"))))
+#+END_SRC
+
+* Tests
+
+#+BEGIN_SRC scheme :tangle ../tests/core/example-test.scm
+;;; example-test.scm --- Tests for example module
+
+(define-module (tests core example-test)
+  #:use-module (srfi srfi-64)
+  #:use-module (core example))
+
+(test-begin "example-module")
+
+(test-group "Data Structure Tests"
+  (test-assert "Create example"
+    (example? (make-example '(1 2 3) '())))
+  
+  (test-equal "Example data accessor"
+    '(1 2 3)
+    (example-data (make-example '(1 2 3) '())))
+  
+  (test-equal "Example metadata accessor"
+    '((key . value))
+    (example-metadata (make-example '() '((key . value))))))
+
+(test-group "Processing Tests"
+  (test-equal "Transform numbers"
+    '(2 4 6)
+    (transform-data '(1 2 3)))
+  
+  (test-equal "Transform strings"
+    '("HELLO" "WORLD")
+    (transform-data '("hello" "world")))
+  
+  (test-equal "Transform symbols"
+    '("foo" "bar")
+    (transform-data '(foo bar))))
+
+(test-group "Validation Tests"
+  (test-error "Empty data validation"
+    (validate-data '()))
+  
+  (test-error "Non-list data validation"
+    (validate-data "not a list"))
+  
+  (test-equal "Valid data passes through"
+    '(1 "test" foo)
+    (validate-data '(1 "test" foo))))
+
+(test-group "Integration Tests"
+  (let ((example (make-example '(1 "hello" foo) '())))
+    (test-assert "Process example returns example"
+      (example? (process-example example)))
+    
+    (test-equal "Process example transforms data"
+      '(2 "HELLO" "foo")
+      (example-data (process-example example)))))
+
+(test-group "Utility Tests"
+  (test-equal "Example to alist conversion"
+    '((data . (1 2 3)) (metadata . ((key . value))))
+    (example->alist (make-example '(1 2 3) '((key . value)))))
+  
+  (test-assert "Alist to example conversion"
+    (example? (alist->example '((data . (1 2 3)) 
+                                (metadata . ()))))))
+
+(test-end "example-module")
+#+END_SRC
+
+* Performance Considerations
+
+** Benchmarking
+
+#+BEGIN_SRC scheme :tangle no
+(use-modules (ice-9 time))
+
+(define (benchmark-processing n)
+  "Benchmark processing n examples."
+  (let ((examples (map (lambda (i)
+                        (make-example 
+                         (iota 100) 
+                         `((id . ,i))))
+                      (iota n))))
+    (time 
+     (for-each process-example examples))))
+
+;; Run benchmark
+;; (benchmark-processing 1000)
+#+END_SRC
+
+** Optimization Notes
+
+1. Use ~map~ and ~fold~ instead of explicit recursion where possible
+2. Consider SRFI-41 streams for lazy evaluation of large datasets
+3. Profile before optimizing - Guile's ~statprof~ module is helpful
+4. Consider using Guile's foreign function interface (FFI) for performance-critical sections
+
+* Export Summary
+
+The following procedures are exported from this module:
+
+- ~make-example~ - Constructor for example records
+- ~example?~ - Predicate for example records
+- ~example-data~ - Data accessor
+- ~process-example~ - Main processing function
+- ~transform-data~ - Data transformation utility
+
+* Future Enhancements
+
+** TODO Implement parallel processing using Fibers
+** TODO Add support for custom transformation rules
+** TODO Integrate with external data sources
+** TODO Add comprehensive logging and debugging support
+
+* References
+
+- [[https://www.gnu.org/software/guile/manual/][GNU Guile Reference Manual]]
+- [[https://srfi.schemers.org/][Scheme Requests for Implementation]]
+- Original book reference: [BOOK_TITLE]
