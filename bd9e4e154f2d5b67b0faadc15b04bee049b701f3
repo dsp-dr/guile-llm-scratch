@@ -1,0 +1,50 @@
+CONTEXT: Project Initialization - 2025-08-20
+
+PURPOSE:
+This project template provides a foundation for implementing programming books
+in Guile3, adapting imperative concepts to functional Scheme paradigms.
+
+ARCHITECTURE DECISIONS:
+1. Literate Programming: Using org-mode with Babel for documentation-first development
+2. Module System: Leveraging Guile's module system for clean separation of concerns
+3. Testing: SRFI-64 for comprehensive unit testing
+4. Build: GNU Make (gmake on FreeBSD) for consistent builds
+
+TECHNICAL NOTES:
+- Guile 3.0.10 on FreeBSD 14.3-RELEASE confirmed working
+- Project structure supports tangling from org files to generate Scheme source
+- Makefile includes targets for compilation, testing, documentation generation
+- .gitignore configured for Guile development with org-mode workflow
+
+IMPLEMENTATION GUIDELINES:
+- Replace [BOOK_TITLE] placeholders with actual book being implemented
+- Split PDFs >100 pages into parts for API processing
+- Use functional patterns: map/fold over loops, immutable data structures
+- Consider Guile3 features: fibers for concurrency, GOOPS for OO patterns
+
+PARALLEL WORK CONSIDERATIONS:
+- src/core/ - Core algorithms and data structures (can be developed independently)
+- src/utils/ - Utility functions (minimal dependencies)
+- tests/ - Test suite (parallelize by module)
+- docs/ - Documentation (can be enhanced continuously)
+
+CURRENT STATE:
+- Basic project structure established
+- Templates ready for customization
+- No book-specific implementation yet
+- Awaiting book PDF and specific requirements
+
+NEXT STEPS:
+1. Add book PDF to tmp/ directory
+2. Customize templates with book-specific details
+3. Begin implementation of Chapter 1 concepts
+4. Set up CI/CD if needed
+
+ISSUES/BLOCKERS:
+- None currently
+- May need PDF splitting tools if book >100 pages
+
+TIMELINE:
+- 2025-08-20: Project initialization
+- Target v0.1.0: Core data structures (est. 1-2 weeks)
+- Target v1.0.0: Full implementation (est. 2-3 months)
