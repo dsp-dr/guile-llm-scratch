@@ -1,0 +1,183 @@
+%%%% Starting test tokenizer-tests
+Group begin: tokenizer-tests
+Group begin: basic-tokenization
+Test begin:
+  test-name: "tokenize simple text"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 17
+  source-form: (test-equal "tokenize simple text" (quote ("Hello" "world")) (tokenize "Hello world"))
+Test end:
+  result-kind: pass
+  actual-value: ("Hello" "world")
+  expected-value: ("Hello" "world")
+Test begin:
+  test-name: "tokenize with punctuation"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 21
+  source-form: (test-equal "tokenize with punctuation" (quote ("Hello," "world!")) (tokenize "Hello, world!"))
+Test end:
+  result-kind: pass
+  actual-value: ("Hello," "world!")
+  expected-value: ("Hello," "world!")
+Test begin:
+  test-name: "tokenize empty string"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 25
+  source-form: (test-equal "tokenize empty string" (quote ()) (tokenize ""))
+Test end:
+  result-kind: pass
+  actual-value: ()
+  expected-value: ()
+Group end: basic-tokenization
+Group begin: vocabulary-building
+Test begin:
+  test-name: "str->int hash table created"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 34
+  source-form: (test-assert "str->int hash table created" #t)
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "int->str hash table created"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 36
+  source-form: (test-assert "int->str hash table created" #t)
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "unknown token index"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 39
+  source-form: (test-equal "unknown token index" 0 (hash-table-ref/default str->int "<unk>" -1))
+Test end:
+  result-kind: pass
+  actual-value: 0
+  expected-value: 0
+Test begin:
+  test-name: "padding token index"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 42
+  source-form: (test-equal "padding token index" 1 (hash-table-ref/default str->int "<pad>" -1))
+Test end:
+  result-kind: pass
+  actual-value: 1
+  expected-value: 1
+Test begin:
+  test-name: "end-of-sequence token index"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 45
+  source-form: (test-equal "end-of-sequence token index" 2 (hash-table-ref/default str->int "<eos>" -1))
+Test end:
+  result-kind: pass
+  actual-value: 2
+  expected-value: 2
+Test begin:
+  test-name: "beginning-of-sequence token index"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 48
+  source-form: (test-equal "beginning-of-sequence token index" 3 (hash-table-ref/default str->int "<bos>" -1))
+Test end:
+  result-kind: pass
+  actual-value: 3
+  expected-value: 3
+Group end: vocabulary-building
+Group begin: tokenizer-operations
+Test begin:
+  test-name: "tokenizer created"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 57
+  source-form: (test-assert "tokenizer created" (tokenizer? tokenizer))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "vocabulary size is positive"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 60
+  source-form: (test-assert "vocabulary size is positive" (> (tokenizer-vocab-size tokenizer) 0))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "encoding produces list"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 64
+  source-form: (test-assert "encoding produces list" (list? encoded))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "encoding produces integers"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 66
+  source-form: (test-assert "encoding produces integers" (and-map integer? encoded))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "decoding produces string"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 70
+  source-form: (test-assert "decoding produces string" (string? decoded))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Group end: tokenizer-operations
+Group begin: bpe-functions
+Test begin:
+  test-name: "get token pairs creates pairs"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 76
+  source-form: (test-assert "get token pairs creates pairs" (let ((pairs (get-token-pairs (quote ("a" "b" "c"))))) (and (= (length pairs) 2) (pair? (car pairs)))))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "merge tokens"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 81
+  source-form: (test-equal "merge tokens" (quote ("ab" "c" "ab")) (merge-tokens (quote ("a" "b" "c" "a" "b")) (quote ("a" . "b")) "ab"))
+Test end:
+  result-kind: pass
+  actual-value: ("ab" "c" "ab")
+  expected-value: ("ab" "c" "ab")
+Test begin:
+  test-name: "frequency table created"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 87
+  source-form: (test-assert "frequency table created" #t)
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "pair frequency count"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 89
+  source-form: (test-equal "pair frequency count" 2 (hash-table-ref/default freq-table (quote ("a" . "b")) 0))
+Test end:
+  result-kind: pass
+  actual-value: 2
+  expected-value: 2
+Test begin:
+  test-name: "bpe tokenize simple"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 93
+  source-form: (test-assert "bpe tokenize simple" (let ((result (bpe-tokenize "abc" 1))) (< (length result) 3)))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Group end: bpe-functions
+Group begin: special-tokens
+Test begin:
+  test-name: "unknown tokens handled"
+  source-file: "/home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch/tests/test-tokenizer.scm"
+  source-line: 103
+  source-form: (test-assert "unknown tokens handled" (member 0 encoded))
+Test end:
+  result-kind: pass
+  actual-value: (0 0 0)
+Group end: special-tokens
+Group end: tokenizer-tests
+# of expected passes      20
