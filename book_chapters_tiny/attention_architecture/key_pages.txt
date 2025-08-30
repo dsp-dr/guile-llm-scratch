@@ -1,0 +1,320 @@
+=== PAGE 0 ===
+29 2.4 Adding special context tokens
+ Next, we will test the tokenizer further on text that contains unknown words and
+discuss additional special to kens that can be used to provide further context for an
+LLM during training.
+2.4 Adding special context tokens
+We need to modify the tokenizer to handle  unknown words. We also need to address
+the usage and addition of special context tokens that can enhance a model’s under-
+standing of context or other relevant in formation in the text. These special tokens
+can include markers for unknown words an d document boundaries, for example. In
+particular, we will modify th e vocabulary and tokenizer, SimpleTokenizerV2 , to sup-
+port two new tokens, <|unk|>  and <|endoftext|> , as illustrated in figure 2.9.
+We can modify the tokenizer to use an <|unk|>  token if it encounters a word that is
+not part of the vocabulary. Furthermore,  we add a token between unrelated texts.
+For example, when training  GPT-like LLMs on multiple independent documents or
+books, it is common to insert a token before each document or book that follows a
+previous text source, as illustrated in figure 2.10. This helps the LLM understand
+that although these text sources are concat enated for training, they are, in fact,
+unrelated.Sample text Tokenized sample text
+The brown dog
+Token IDsplayfully
+7 0 1 783brown
+dog
+fox0
+1
+2
+<|unk|>
+<|endoftext|>783
+784Existing vocabulary
+Extend vocabulary
+with additionalspecial tokensThe brown dog
+playfully chasedthe swift fox
+Figure 2.9 We add special tokens to a vocabulary to deal with certain contexts. For instance, 
+we add an <|unk|>  token to represent new and unknown words that were not part of the training 
+data and thus not part of the existing vocabulary. Furthermore, we add an <|endoftext|>  
+token that we can use to separate two unrelated text sources. 
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 1 ===
+30 CHAPTER  2Working with text data
+Let’s now modify the vocabulary to include these two special tokens, <unk>  and
+<|endoftext|> , by adding them to our list of all unique words:
+all_tokens = sorted(list(set(preprocessed)))
+all_tokens.extend(["<|endoftext|>", "<|unk|>"])vocab = {token:integer for integer,token in enumerate(all_tokens)}
+print(len(vocab.items()))
+Based on the output of this print statement,  the new vocabulary size is 1,132 (the pre-
+vious vocabulary size was 1,130).
+ As an additional quick check, let’s print th e last five entries of the updated vocabulary:
+for i, item in enumerate(list(vocab.items())[-5:]):
+    print(item)
+The code prints
+('younger', 1127)('your', 1128)
+('yourself', 1129)('<|endoftext|>', 1130)
+('<|unk|>', 1131)The<|endoftext|> tokens are
+prepended to each subsequent textsource.Independent text source
+Text concatenated from all
+independent sources“… the underdog
+team ﬁnally clinchedthe championship ina thrilling overtimevictory.”“…<|endoftext|>
+Elara and Finn livedwith kindness andwisdom, enjoyingtheir days happilyever after.”“…<|endoftext|>
+The Dow JonesIndustrial Averageclosed up 250 pointstoday, marking itshighest gain in thepast three months.”“…<|endoftext|>
+Amelia smiled,knowing her journeyhad forever changedher heart.”
+“… in a thrilling overtime victory. … days happily ever after. <|endoftext|> <|endoftext|>
+… marking its highest gain in the past three months. … journey had forever <|endoftext|>
+changed her heart.”
+Figure 2.10 When working with multiple independent text source, we add <|endoftext|>  
+tokens between these texts. These <|endoftext|>  tokens act as markers, signaling the 
+start or end of a particular segment, allowing for more effective processing and understanding 
+by the LLM.
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 2 ===
+31 2.4 Adding special context tokens
+Based on the code output, we can confirm that the two new special tokens were
+indeed successfully incorporated into the vocabulary. Next, we adjust the tokenizer
+from code listing 2.3 accordingly as shown in the following listing.
+class SimpleTokenizerV2:
+    def __init__(self, vocab):
+        self.str_to_int = vocab        self.int_to_str = { i:s for s,i in vocab.items()}
+    
+    def encode(self, text):
+        preprocessed = re.split(r'([,.:;?_!"()\']|--|\s)', text)
+        preprocessed = [            item.strip() for item in preprocessed if item.strip()
+        ]
+        preprocessed = [item if item in self.str_to_int                                   else "<|unk|>" for item in preprocessed]
+        ids = [self.str_to_int[s] for s in preprocessed]
+        return ids        
+    def decode(self, ids):
+        text = " ".join([self.int_to_str[i] for i in ids])
+        text = re.sub(r'\s+([,.:;?!"()\'])', r'\1', text)   
+        return text
+Compared to the SimpleTokenizerV1  we implemented in listing 2.3, the new Simple-
+TokenizerV2  replaces unknown words with <|unk|>  tokens. 
+ Let’s now try this new tokenizer out in practice. For this, we will use a simple text
+sample that we concaten ate from two independent and unrelated sentences:
+text1 = "Hello, do you like tea?"
+text2 = "In the sunlit terraces of the palace."
+text = " <|endoftext|> ".join((text1, text2))print(text)
+The output is
+Hello, do you like tea? <|endoftext|> In the sunlit terraces of the palace.
+Next, let’s tokenize the sample text using the SimpleTokenizerV2  on the vocab we
+previously created in listing 2.2:
+tokenizer = SimpleTokenizerV2(vocab)
+print(tokenizer.encode(text))Listing 2.4 A simple text tokenizer that handles unknown words
+Replaces
+unknown words
+by <|unk|>
+tokens
+Replaces spaces 
+before the specified 
+punctuations
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 5 ===
+34 CHAPTER  2Working with text data
+We can make two noteworthy observations based on the token IDs and decoded text.
+First, the <|endoftext|>  token is assigned a relati vely large token ID, namely, 50256 .
+In fact, the BPE tokenizer, which was used to train models such as GPT-2, GPT-3, and
+the original model used in ChatGPT, has a total vocabulary size of 50,257, with
+<|endoftext|>  being assigned the largest token ID.
+ Second, the BPE tokenizer encodes and decodes unknown words, such as
+someunknownPlace , correctly. The BPE tokenizer can handle any unknown word. How
+does it achieve this without using <|unk|>  tokens?
+ The algorithm underlying BPE breaks do wn words that aren’t in its predefined
+vocabulary into smaller subword units or even individual characters, enabling it tohandle out-of-vocabulary words. So, thanks  to the BPE algorithm, if the tokenizer
+encounters an unfamiliar word during toke nization, it can represent it as a sequence
+of subword tokens or characters, as illustrated in figure 2.11.
+The ability to break down unknown words into individual characters ensures that
+the tokenizer and, consequently, the LLM that  is trained with it can process any text,
+even if it contains words that were  not present in its training data.
+A detailed discussion and implementation of BPE is out of the scope of this book, but
+in short, it builds its vocabulary by iter atively merging frequent  characters into sub-
+words and frequent subw ords into words. For example, BP E starts with adding all indi-
+vidual single characters to its vocabulary (“a, ” “b,” etc.). In the next stage, it merges
+character combinations that frequently oc cur together into su bwords. For example,
+“d” and “e” may be merged into the subwor d “de,” which is common in many EnglishExercise 2.1 Byte pair encoding of unknown words 
+Try the BPE tokenizer from the tiktoken li brary on the unknown words “Akwirw ier” and
+print the individual token IDs. Then, call the decode  function on each of the resulting
+integers in this list to reproduce the mapp ing shown in figure 2.11. Lastly, call the
+decode method on the token IDs to check whether it can reconstruct the original
+input, “Akwirw ier.”"Akwirw ier"
+"Ak" "w" "ir" "w" " " "ier"
+33901 86 343 86 220 959Text sample with
+unknown words
+Unknown words are
+tokenized into individualcharacters or subwords.
+Tokens:
+Token IDs:Figure 2.11 BPE tokenizers 
+break down unknown words into subwords and individual 
+characters. This way, a BPE 
+tokenizer can parse any word and doesn’t need to replace 
+unknown words with special 
+tokens, such as 
+<|unk|> .
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 10 ===
+39 2.6 Data sampling with a sliding window
+Let’s test the dataloader  with a batch size of 1 for an LLM with a context size of 4 to
+develop an intuition of how the GPTDatasetV1  class from listing 2.5 and the create_
+dataloader_v1  function from listin g 2.6 work together:
+with open("the-verdict.txt", "r", encoding="utf-8") as f:
+    raw_text = f.read()
+dataloader = create_dataloader_v1(
+    raw_text, batch_size=1, max_length=4, stride=1, shuffle=False)
+data_iter = iter(dataloader)     first_batch = next(data_iter)
+print(first_batch)
+Executing the preceding co de prints the following:
+[tensor([[  40,  367, 2885, 1464]]), tensor([[ 367, 2885, 1464, 1807]])]
+The first_batch  variable contains two tensors: the first tensor stores the input token
+IDs, and the second tensor stores  the target token IDs. Since the max_length  is set to
+4, each of the two tensors contains four token IDs. Note that an input size of 4 is quite
+small and only chosen for simplicity. It is  common to train LLMs with input sizes of at
+least 256.
+ To understand the meaning of stride=1 , let’s fetch another batch from this dataset:
+second_batch = next(data_iter)
+print(second_batch)
+The second batch has the following contents:
+[tensor([[ 367, 2885, 1464, 1807]]), tensor([[2885, 1464, 1807, 3619]])]
+If we compare the first and se cond batches, we can see th at the second batch’s token
+IDs are shifted by one position  (for example, the second ID in the first batch’s input is
+367, which is the first ID of the second batch’s input). The stride  setting dictates the
+number of positions the inputs shift ac ross batches, emulating a sliding window
+approach, as demonstrated in figure 2.14.
+Batch sizes of 1, such as we have sampled fr om the data loader so far, are useful for
+illustration purposes. If you have previous experience with deep learning, you mayknow that small batch sizes require less me mory during training but lead to moreExercise 2.2 Data loaders with different strides and context sizes
+To develop more intuition for how the data loader works, try to run it with different
+settings such as max_length=2  and stride=2,  and max_length=8  and stride=2 .Converts dataloader  into a Python 
+iterator to fetch the next entry via Python’s built-in next() function
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 15 ===
+44 CHAPTER  2Working with text data
+0.3374 −0.1778 − 0.1690
+0.9178 1.5810 1.3010
+1.2753 − 0.2010 − 0.1606
+− 0.4015 0.9666 − 1.1481
+− 1.1589 0.3255 − 0.6315
+− 2.8400 − 0.7849 − 1.4096Weight matrix of the
+embedding layer
+2
+3
+5
+1
+1.2753 − 0.2010 − 0.1606
+− 0.4015 0.9666 − 1.1481
+− 2.8400 − 0.7849 − 1.4096
+0.9178 1.5810 1.30102
+1.2753 −0.2010 −0.16062
+3
+5
+15Token IDs to embed
+Embedded token IDsEmbedding vector of
+the ﬁrst token ID
+Embedding vector of
+the third token ID1.2753 −0.2010 −0.1606
+−2.8400 −0.7849 −1.4096fox
+jumps
+overdog fox
+jumps
+over
+dogInput text
+−2.8400 −0.7849 −1.4096
+Figure 2.16 Embedding layers perform a lookup operation, retrieving the embedding 
+vector corresponding to the token ID from  the embedding layer’s weight matrix. For 
+instance, the embedding vector of the token ID 5 is the sixth row of the embedding 
+layer weight matrix (it is the sixth instead of the fifth row because Python starts counting at 0). We assume that the token IDs were produced by the small vocabulary 
+from section 2.3.
+0.3374 − 0.1778 − 0.1690
+0.9178 1.5810 1.30101.2753 − 0.2010 − 0.1606
+− 0.4015 0.9666 − 1.1481
+− 1.1589 0.3255 − 0.6315
+− 2.8400 − 0.7849 − 1.4096
+2
+3
+5
+2
+1.2753 − 0.2010 − 0.1606
+− 0.4015 0.9666 − 1.1481
+− 2.8400 − 0.7849 − 1.4096
+1.2753 − 0.2010 − 0.16062
+1.2753 −0.2010 −0.16062
+3
+5
+2fox
+jumps
+over
+fox fox
+jumps
+over
+fox2
+1.2753 −0.201 0− 0.1606Weight matrix of the
+embedding layer
+Token IDs to embed
+The same token IDs
+result in the sameembedding vectors1.2753 −0.2010 −0.1606
+Figure 2.17 The embedding layer converts a token ID into the same vector 
+representation regardless of where it  is located in the input sequence. For 
+example, the token ID 5, whether it’s in the first or fourth position in the token ID input vector, will result in the same embedding vector.
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 25 ===
+54 CHAPTER  3Coding attention mechanisms
+ Fortunately, it is not essential to understand RNNs to build an LLM. Just remem-
+ber that encoder–decoder RNNs had a shortcoming that motivated the design of
+attention mechanisms.
+3.2 Capturing data dependencies with attention 
+mechanisms
+Although RNNs work fine for translating shor t sentences, they don’t work well for lon-
+ger texts as they don’t have direct access to previous words in the input. One majorshortcoming in this approach is that th e RNN must remember the entire encoded
+input in a single hidden state before pa ssing it to the decoder (figure 3.4).
+ Hence, researchers developed the Bahdanau attention  mechanism for RNNs in
+2014 (named after the first author of the re spective paper; for more information, see
+appendix B), which modifies the encoder–decoder RNN such that the decoder can
+selectively access different parts of the input sequence at each decoding step as illus-
+trated in figure 3.5.
+Interestingly, only three years later, re searchers found that RNN architectures are
+not required for building deep neural netw orks for natural lang uage processing anddu Kannst miryou Can help
+Hidden statesOutputs
+InputsWhen generating an output
+token, the model has a wayto access all input tokens.
+The dotted line width is proportional
+to how important the input token isfor the respective output token.We are focusing on
+generating the secondoutput token.
+Figure 3.5 Using an attention mechanism, the text-generating decoder part of the network can 
+access all input tokens selectively. This means that some input tokens are more important than others for generating a given output token. The importance is determined by the attention weights, which we 
+will compute later. Note that this figure show s the general idea behind attention and does not depict 
+the exact implementation of the Bahdanau mechanism, which is an RNN method outside this book’s scope.
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 30 ===
+59 3.3 Attending to different parts of the input with self-attention
+In the next step, as shown in figure 3.9, we normalize each of the attention scores we
+computed previously. The main goal behind  the normalization is to obtain attention
+weights that sum up to 1. This  normalization is a convention that is useful for interpre-
+tation and maintaining training stability in an LLM. Here’s a straightforward method
+for achieving this normalization step:
+attn_weights_2_tmp = attn_scores_2 / attn_scores_2.sum()
+print("Attention weights:", attn_weights_2_tmp)
+print("Sum:", attn_weights_2_tmp.sum())
+As the output shows, the attention weights now sum to 1: 
+Attention weights: tensor([0.1455, 0.2278, 0.2249, 0.1285, 0.1077, 0.1656])
+Sum: tensor(1.0000)
+In practice, it’s more commo n and advisable to use the softmax function for normal-
+ization. This approach is better at managi ng extreme values and offers more favorableBeyond viewing the dot product operation as a mathematical tool that combines
+two vectors to yield a scalar value, the dot product is a measure of similarity
+because it quantifies how closely two vector s are aligned: a higher dot product indi-
+cates a greater degree of alignment or similarity between the vectors. In the con-
+text of self-attention mechanisms, the dot  product determines the extent to which
+each element in a sequence focuses on, or “attends to,” any other element: thehigher the dot product, the higher the si milarity and attention score between two
+elements.
+Attention weights:We computed these attention
+scores in the previous step.
+We now normalize the
+attention scores to obtain ω
+the attention weights α0.4 0.1 0.8 0.5 0.8 0.6 0.5 0.8 0.6 0.0 0.8 0.5
+0.5 0.8 0.6 0.9 1.4 1.4 1.0
+0.1 0.2 0.2 0.1
+Figure 3.9 After computing the attention scores 21 to 2T with respect to the input query x(2), the next 
+step is to obtain the attention weights 21 to 2T by normalizing the attention scores.
+Licensed to Jason Walsh <manning@jwalsh.net>

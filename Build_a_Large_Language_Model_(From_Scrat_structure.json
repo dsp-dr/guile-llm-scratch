@@ -1,0 +1,283 @@
+{
+  "pdf_path": "tmp/Build_a_Large_Language_Model_(From_Scrat.pdf",
+  "total_pdf_pages": 370,
+  "page_mapping": {
+    "2": 111
+  },
+  "toc": [
+    {
+      "type": "section",
+      "number": "1.1",
+      "title": "What is an LLM?",
+      "book_page": 2,
+      "pdf_page": 111
+    },
+    {
+      "type": "section",
+      "number": "1.2",
+      "title": "Applications of LLMs 41.3 Stages of building and using LLMs",
+      "book_page": 5,
+      "pdf_page": 114
+    },
+    {
+      "type": "section",
+      "number": "1.4",
+      "title": "Introducing the transformer architecture",
+      "book_page": 7,
+      "pdf_page": 116
+    },
+    {
+      "type": "section",
+      "number": "1.5",
+      "title": "Utilizing large datasets 101.6 A closer look at the GPT architecture",
+      "book_page": 12,
+      "pdf_page": 121
+    },
+    {
+      "type": "section",
+      "number": "1.7",
+      "title": "Building a large language model",
+      "book_page": 14,
+      "pdf_page": 123
+    },
+    {
+      "type": "section",
+      "number": "2.1",
+      "title": "Understanding word embeddings",
+      "book_page": 18,
+      "pdf_page": 127
+    },
+    {
+      "type": "section",
+      "number": "2.2",
+      "title": "Tokenizing text",
+      "book_page": 21,
+      "pdf_page": 130
+    },
+    {
+      "type": "section",
+      "number": "2.3",
+      "title": "Converting tokens into token IDs",
+      "book_page": 24,
+      "pdf_page": 133
+    },
+    {
+      "type": "section",
+      "number": "2.4",
+      "title": "Adding special context tokens",
+      "book_page": 29,
+      "pdf_page": 138
+    },
+    {
+      "type": "section",
+      "number": "2.5",
+      "title": "Byte pair encoding",
+      "book_page": 33,
+      "pdf_page": 142
+    },
+    {
+      "type": "section",
+      "number": "2.6",
+      "title": "Data sampling with a sliding window",
+      "book_page": 35,
+      "pdf_page": 144
+    },
+    {
+      "type": "section",
+      "number": "2.7",
+      "title": "Creating token embeddings",
+      "book_page": 41,
+      "pdf_page": 150
+    },
+    {
+      "type": "section",
+      "number": "2.8",
+      "title": "Encoding word positions",
+      "book_page": 43,
+      "pdf_page": 152
+    },
+    {
+      "type": "section",
+      "number": "3.1",
+      "title": "The problem with modeling long sequences",
+      "book_page": 52,
+      "pdf_page": 161
+    },
+    {
+      "type": "section",
+      "number": "3.4",
+      "title": "Implementing self-attention with trainable weights",
+      "book_page": 64,
+      "pdf_page": 173
+    },
+    {
+      "type": "section",
+      "number": "3.5",
+      "title": "Hiding future words with causal attention",
+      "book_page": 74,
+      "pdf_page": 183
+    },
+    {
+      "type": "section",
+      "number": "4.1",
+      "title": "Coding an LLM architecture",
+      "book_page": 93,
+      "pdf_page": 202
+    },
+    {
+      "type": "section",
+      "number": "4.2",
+      "title": "Normalizing activations with layer normalization",
+      "book_page": 99,
+      "pdf_page": 208
+    },
+    {
+      "type": "section",
+      "number": "4.4",
+      "title": "Adding shortcut connections",
+      "book_page": 109,
+      "pdf_page": 218
+    },
+    {
+      "type": "section",
+      "number": "4.6",
+      "title": "Coding the GPT model",
+      "book_page": 117,
+      "pdf_page": 226
+    },
+    {
+      "type": "section",
+      "number": "4.7",
+      "title": "Generating text",
+      "book_page": 122,
+      "pdf_page": 231
+    },
+    {
+      "type": "section",
+      "number": "5.1",
+      "title": "Evaluating generative text models",
+      "book_page": 129,
+      "pdf_page": 238
+    },
+    {
+      "type": "section",
+      "number": "5.2",
+      "title": "Training an LLM",
+      "book_page": 146,
+      "pdf_page": 255
+    },
+    {
+      "type": "section",
+      "number": "5.3",
+      "title": "Decoding strategies to control randomness",
+      "book_page": 151,
+      "pdf_page": 260
+    },
+    {
+      "type": "section",
+      "number": "5.4",
+      "title": "Loading and saving model weights in PyTorch",
+      "book_page": 159,
+      "pdf_page": 268
+    },
+    {
+      "type": "section",
+      "number": "5.5",
+      "title": "Loading pretrained weights from OpenAI",
+      "book_page": 160,
+      "pdf_page": 269
+    },
+    {
+      "type": "section",
+      "number": "6.1",
+      "title": "Different categories of fine-tuning",
+      "book_page": 170,
+      "pdf_page": 279
+    },
+    {
+      "type": "section",
+      "number": "6.2",
+      "title": "Preparing the dataset 1726.3 Creating data loaders",
+      "book_page": 175,
+      "pdf_page": 284
+    },
+    {
+      "type": "section",
+      "number": "6.4",
+      "title": "Initializing a model with pretrained weights",
+      "book_page": 181,
+      "pdf_page": 290
+    },
+    {
+      "type": "section",
+      "number": "6.5",
+      "title": "Adding a classification head 1836.6 Calculating the classification loss and accuracy",
+      "book_page": 190,
+      "pdf_page": 299
+    },
+    {
+      "type": "section",
+      "number": "6.7",
+      "title": "Fine-tuning the model on supervised data",
+      "book_page": 195,
+      "pdf_page": 304
+    },
+    {
+      "type": "section",
+      "number": "6.8",
+      "title": "Using the LLM as a spam classifier",
+      "book_page": 200,
+      "pdf_page": 309
+    },
+    {
+      "type": "section",
+      "number": "7.1",
+      "title": "Introduction to instruction fine-tuning",
+      "book_page": 205,
+      "pdf_page": 314
+    },
+    {
+      "type": "section",
+      "number": "7.3",
+      "title": "Organizing data into training batches",
+      "book_page": 211,
+      "pdf_page": 320
+    },
+    {
+      "type": "section",
+      "number": "7.4",
+      "title": "Creating data loaders fo r an instruction dataset",
+      "book_page": 223,
+      "pdf_page": 332
+    },
+    {
+      "type": "section",
+      "number": "7.5",
+      "title": "Loading a pretrained LLM",
+      "book_page": 226,
+      "pdf_page": 335
+    },
+    {
+      "type": "section",
+      "number": "7.6",
+      "title": "Fine-tuning the LLM on instruction data",
+      "book_page": 229,
+      "pdf_page": 338
+    },
+    {
+      "type": "section",
+      "number": "7.7",
+      "title": "Extracting and saving responses 2337.8 Evaluating the fine-tuned LLM",
+      "book_page": 238,
+      "pdf_page": 347
+    },
+    {
+      "type": "section",
+      "number": "7.9",
+      "title": "Conclusions",
+      "book_page": 247,
+      "pdf_page": 356
+    }
+  ],
+  "chapters": []
+}

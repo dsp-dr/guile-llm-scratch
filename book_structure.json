@@ -1,0 +1,43 @@
+{
+  "title": "Build a Large Language Model (From Scratch)",
+  "parts": [],
+  "chapters": [
+    {
+      "number": 1,
+      "title": "Understanding Large Language Models",
+      "estimated_page": 1
+    },
+    {
+      "number": 2,
+      "title": "Working with Text Data",
+      "estimated_page": 20
+    },
+    {
+      "number": 3,
+      "title": "Attention Mechanisms",
+      "estimated_page": 50
+    },
+    {
+      "number": 4,
+      "title": "Implementing a GPT Model from Scratch",
+      "estimated_page": 80
+    },
+    {
+      "number": 5,
+      "title": "Pretraining on Unlabeled Data",
+      "estimated_page": 120
+    },
+    {
+      "number": 6,
+      "title": "Fine-tuning for Classification",
+      "estimated_page": 160
+    },
+    {
+      "number": 7,
+      "title": "Fine-tuning to Follow Instructions",
+      "estimated_page": 200
+    }
+  ],
+  "appendices": [],
+  "total_pages": 370
+}

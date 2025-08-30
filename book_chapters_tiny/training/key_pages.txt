@@ -1,0 +1,259 @@
+=== PAGE 0 ===
+129 5.1 Evaluating generative text models
+5.1 Evaluating generative text models
+After briefly recapping the text generation from chapter 4, we will set up our LLM for
+text generation and then discuss basic ways to  evaluate the quality of the generated text.
+We will then calculate the training and va lidation losses. Figure 5.2 shows the topics
+covered in this chapter, with th ese first three steps highlighted.
+ Weight parameters 
+In the context of LLMs and other deep learning models, weights  refer to the trainable
+parameters that the learning process ad justs. These weights are also known as
+weight parameters  or simply parameters . In frameworks like PyTorch, these weights
+are stored in linear layers; we used thes e to implement the mu lti-head attention mod-
+ule in chapter 3 and the GPTModel  in chapter 4. After initializing a layer ( new_layer
+= torch.nn.Linear(...) ), we can access its weights through the .weight  attri-
+bute, new_layer.weight . Additionally, for convenience, PyTorch allows direct
+access to all a model’s trainable parameters, including weights and biases, through
+the method model.parameters() , which we will use later when implementing the
+model training.In this chapter, we will
+pretrain the LLM model.In the previous chapter, we
+implemented a GPT-likeLLM architecture.For the pretraining, we will
+implement the trainingloop along with modelevaluation metrics.Finally, we load openly
+available pretrained
+weights into the
+model.
+1) Data
+preparation
+& sampling2) Attention
+mechanism
+Building an LLMSTAGE 1
+Foundation model
+STAGE 2STAGE 3
+Classiﬁer
+Personal assistantDataset with class labels
+Instruction dataset4) Pretraining
+9) Fine-tuning5) Training
+loop6) Model
+evaluation7) Load
+pretrained
+weights8) Fine-tuning3) LLM
+architecture
+Figure 5.1 The three main stages of coding an LLM. This  chapter focuses on stage 2: pretraining the LLM (step 
+4), which includes implementing the training code (step 5), evaluating the performance (step 6), and saving and 
+loading model weights (step 7).
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 1 ===
+130 CHAPTER  5Pretraining on unlabeled data
+5.1.1 Using GPT to generate text
+Let’s set up the LLM and briefly recap the text generation process we implemented in
+chapter 4. We begin by initializing the GPT model that we will later evaluate and train
+using the GPTModel  class and GPT_CONFIG_124M  dictionary (see chapter 4):
+import torch
+from chapter04 import GPTModel
+GPT_CONFIG_124M = {
+    "vocab_size": 50257,
+    "context_length": 256,   
+    "emb_dim": 768,    "n_heads": 12,
+    "n_layers": 12, 
+    "drop_rate": 0.1,          "qkv_bias": False
+}
+torch.manual_seed(123)model = GPTModel(GPT_CONFIG_124M)
+model.eval()
+Considering the GPT_CONFIG_124M  dictionary, the only adjustment we have made com-
+pared to the previous chapter is that we have reduced the context length ( context_
+length ) to 256 tokens. This modification reduces the computational demands of
+training the model, making it possible to carry out the training on a standard laptop
+computer.
+ Originally, the GPT-2 model with 124 million parameters was configured to handle
+up to 1,024 tokens. After the training proce ss, we will update the context size setting1) Text
+generation
+2) Text
+evaluation
+3) Training
+& validation
+losses4) LLM training
+function5) Text generation
+strategies6) Weight saving &
+loading7) Pretrained weights
+from OpenAI
+Train the model
+to generatehuman-like textImplement additional LLM text
+generation strategies to reducetraining data memorization
+Evaluate how well
+the model performsLoad pretrained weights from
+OpenAI into our LLM modelImplement functions to save and
+load the LLM weights to use orcontinue training the LLM later
+Figure 5.2 An overview of the topics covered in th is chapter. We begin by recapping text generation 
+(step 1) before moving on to discuss basic model evaluation techniques (step 2) and training and 
+validation losses (step 3).
+We shorten the 
+context length from 
+1,024 to 256 tokens.
+It’s possible and common 
+to set dropout to 0.
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 2 ===
+131 5.1 Evaluating generative text models
+and load pretrained weights to work with  a model configured for a 1,024-token con-
+text length.
+ Using the GPTModel  instance, we adopt the generate_text_simple  function from
+chapter 4 and introduce two handy functions: text_to_token_  ids and token_ids_
+to_text . These functions facilitate the conversi on between text and token represen-
+tations, a technique we will ut ilize throughout this chapter. 
+Figure 5.3 illustrates a three-step text ge neration process using a GPT model. First,
+the tokenizer converts input text into a se ries of token IDs (see chapter 2). Second,
+the model receives these token IDs and gene rates corresponding logits, which are vec-
+tors representing the probability distributi on for each token in the vocabulary (see
+chapter 4). Third, these logits  are converted back into to ken IDs, which the tokenizer
+decodes into human-readable text, completing the cycle from textual input to tex-
+tual output.
+ We can implement the text generation pr ocess, as shown in the following listing.
+import tiktoken
+from chapter04 import generate_text_simple
+def text_to_token_ids(text, tokenizer):
+    encoded = tokenizer.encode(text, allowed_special={'<|endoftext|>'})Listing 5.1 Utility functions for text to token ID conversionGPTModelEvery effort moves you tensor([[ 6109, 3626, 6100, 345 ]])
+Tokenizer
+tensor([[[-0.2968, ..., -0.1714],
+[-1.3747, ...,  0.3993],
+[ 1.8251, ..., -0.9297],
+[-0.0922, ..., -0.6768]]])effort moves you forward
+Tokenizer1. Use the tokenizer to encode input
+text into a token ID representation.
+2. Given four input token IDs, the model
+produces 4 logit vectors (rows) whereeach vector has 50,257 elements(columns) equal to the vocabulary size.3. After converting the logits to
+token IDs, we use the tokenizerto decode these IDs back intoa text representation.text_to_token_ids()
+token_ids_to_text()
+Figure 5.3 Generating text involves encoding text into token IDs that the LLM processes into logit vectors. The 
+logit vectors are then converted back into tok en IDs, detokenized into a text representation.
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 5 ===
+134 CHAPTER  5Pretraining on unlabeled data
+ Now we feed the inputs into the model to  calculate logits vectors for the two input
+examples, each comprising three tokens. Then we apply the softmax  function to
+transform these logits into probability scores ( probas ; figure 5.4, step 2):
+with torch.no_grad():    
+    logits = model(inputs)
+probas = torch.softmax(logits, dim=-1)    print(probas.shape)
+The resulting tensor dimension of the probability score ( probas ) tensor is
+torch.Size([2, 3, 50257])
+The first number, 2, corresponds to the two examples (rows) in the inputs, also known
+as batch size. The second number, 3, corre sponds to the number of tokens in each
+input (row). Finally, the last number co rresponds to the embedding dimensionality,
+which is determined by the vocabulary size . Following the conversion from logits to
+probabilities via the softmax  function, the generate_text_simple  function then con-
+verts the resulting probabil ity scores back into text (figure 5.4, steps 3–5).
+ We can complete steps 3 and 4 by applying the argmax  function to the probability
+scores to obtain the co rresponding token IDs:
+token_ids = torch.argmax(probas, dim=-1, keepdim=True)
+print("Token IDs:\n", token_ids)
+Given that we have two input batches, ea ch containing three tokens, applying the
+argmax  function to the probability scores (figure 5.4, step 3) yields two sets of outputs,
+each with three predicted token IDs:
+Token IDs:
+ tensor([[[16657],               [  339],
+         [42826]],
+        [[49906],                [29669],
+         [41751]]])
+Finally, step 5 converts the token IDs back into text:
+print(f"Targets batch 1: {token_ids_to_text(targets[0], tokenizer)}")
+print(f"Outputs batch 1:"      f" {token_ids_to_text(token_ids[0].flatten(), tokenizer)}")
+When we decode these tokens, we find that  these output tokens are quite different
+from the target tokens we want the model to generate:
+Targets batch 1:  effort moves you
+Outputs batch 1:  Armed heNetflixDisables gradient tracking 
+since we are not training yet
+Probability of each 
+token in vocabulary
+First batch
+Second batch
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 10 ===
+139 5.1 Evaluating generative text models
+The resulting shapes are
+Logits shape: torch.Size([2, 3, 50257])
+Targets shape: torch.Size([2, 3])
+As we can see, the logits  tensor has three dimensions: batch size, number of tokens,
+and vocabulary size. The targets  tensor has two dimensions: batch size and number
+of tokens.
+ For the cross_entropy  loss function in PyTorch, we want to flatten these tensors
+by combining them over the batch dimension:
+logits_flat = logits.flatten(0, 1)
+targets_flat = targets.flatten()
+print("Flattened logits:", logits_flat.shape)
+print("Flattened targets:", targets_flat.shape)
+The resulting tensor dimensions are
+Flattened logits: torch.Size([6, 50257])Flattened targets: torch.Size([6])
+Remember that the targets  are the token IDs we want the LLM to generate, and the
+logits  contain the unscaled model outputs before they enter the softmax  function to
+obtain the probability scores.
+ Previously, we applied the softmax  function, selected the probability scores corre-
+sponding to the target IDs, and comput ed the negative average log probabilities.
+PyTorch’s cross_entropy  function will take care of all these steps for us:
+loss = torch.nn.functional.cross_entropy(logits_flat, targets_flat)
+print(loss)
+The resulting loss is the same that we obta ined previously when applying the individ-
+ual steps in figure 5.7 manually:
+tensor(10.7940)
+Perplexity
+Perplexity  is a measure often used alongside cross entropy loss to evaluate the per-
+formance of models in tasks like language modeling. It can provide a more interpre-table way to understand the uncertainty of a model in predicting the next token in a
+sequence. 
+Perplexity measures how well the probabi lity distribution predicted by the model
+matches the actual distribution of the words in the dataset. Similar to the loss, a lower
+perplexity indicates that the model predictions are closer to the actual distribution.
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 15 ===
+144 CHAPTER  5Pretraining on unlabeled data
+Validation loader:
+torch.Size([2, 256]) torch.Size([2, 256])
+Based on the preceding code output, we have nine traini ng set batches with two sam-
+ples and 256 tokens each. Since we allocated only 10% of the data for validation, there
+is only one validation batch consisting of  two input examples. As expected, the input
+data (x) and target data ( y) have the same shape (the ba tch size times the number of
+tokens in each batch) since the targets are the inputs shifted by one position, as dis-
+cussed in chapter 2.
+ Next, we implement a utility function to calculate the cross entropy loss of a given
+batch returned via the trai ning and validation loader:
+def calc_loss_batch(input_batch, target_batch, model, device):
+    input_batch = input_batch.to(device)        
+    target_batch = target_batch.to(device)          logits = model(input_batch)
+    loss = torch.nn.functional.cross_entropy(
+        logits.flatten(0, 1), target_batch.flatten()    )    return loss
+We can now use this calc_loss_batch  utility function, which computes the loss for a
+single batch, to implement the following calc_loss_loader  function that computes
+the loss over all the batches sampled by a given data loader.
+def calc_loss_loader(data_loader, model, device, num_batches=None):
+    total_loss = 0.
+    if len(data_loader) == 0:        return float("nan")
+    elif num_batches is None:
+        num_batches = len(data_loader)        else:
+        num_batches = min(num_batches, len(data_loader))  
+    for i, (input_batch, target_batch) in enumerate(data_loader):        if i < num_batches:
+            loss = calc_loss_batch(
+                input_batch, target_batch, model, device            )
+            total_loss += loss.item()   
+        else:            break
+    return total_loss / num_batches   
+By default, the calc_loss_loader  function iterates over all batches in a given data
+loader, accumulates the loss in the total_loss  variable, and then computes andListing 5.2 Function to compute the training and validation lossThe transfer to a 
+given device allows us to transfer the 
+data to a GPU.
+Iteratives over all 
+batches if no fixed num_batches is specified
+Reduces the number
+of batches to match
+the total number of
+batches in the data
+loader if num_batches
+exceeds the number
+of batches in the
+data loaderSums loss 
+for each 
+batch
+Averages the loss over all batches
+Licensed to Jason Walsh <manning@jwalsh.net>

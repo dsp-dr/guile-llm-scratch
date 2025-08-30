@@ -1,0 +1,114 @@
+=== PAGE 0 ===
+MANNINGSebastian RaschkaFROMSCRATCH
+BUILD A
+
+=== PAGE 1 ===
+1) Data
+preparation
+& sampling2) Attention
+mechanism
+Building an LLMSTAGE 1
+Foundation modelSTAGE 2 STAGE 3
+Classiﬁer
+Personal assistantDataset with class labels
+Instruction datasetImplements the data sampling and
+understand the basic mechanismPretrains the LLM on unlabeled
+data to obtain a foundationmodel for further ﬁne-tuningFine-tunes the pretrained
+LLM to create aclassiﬁcation model
+Fine-tunes the pretrained
+LLM to create a personalassistant or chat model4) Pretraining
+9) Fine-tuning5) Training
+loop6) Model
+evaluation7) Load
+pretrained
+weights8) Fine-tuning3) LLM
+architecture
+The three main stages of coding a large language m odel (LLM) are implementing the LLM architecture and data 
+preparation process (stage 1), pretraining an LLM to cr eate a foundation model (stage 2), and fine-tuning the 
+foundation model to become a personal assistant or text cla ssifier (stage 3). Each of these stages is explored 
+and implemented in this book.
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 2 ===
+Build a Large Language Model (From Scratch)
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 10 ===
+CONTENTS ix
+5 Pretraining on unlabeled data 128
+5.1 Evaluating generative text models 129
+Using GPT to generate text 130■Calculating the text 
+generation loss 132■Calculating the training and validation 
+set losses 140
+5.2 Training an LLM 146
+5.3 Decoding strategies to control randomness 151
+Temperature scaling 152■Top-k sampling 155
+Modifying the text generation function 157
+5.4 Loading and saving model weights in PyTorch 159
+5.5 Loading pretrained weights from OpenAI 160
+6 Fine-tuning for classification 169
+6.1 Different categories of fine-tuning 170
+6.2 Preparing the dataset 1726.3 Creating data loaders 175
+6.4 Initializing a model with pretrained weights 181
+6.5 Adding a classification head 1836.6 Calculating the classification loss and accuracy 190
+6.7 Fine-tuning the model on supervised data 195
+6.8 Using the LLM as a spam classifier 200
+7 Fine-tuning to follow instructions 204
+7.1 Introduction to instruction fine-tuning 205
+7.2 Preparing a dataset for supervised instruction 
+fine-tuning 207
+7.3 Organizing data into training batches 211
+7.4 Creating data loaders fo r an instruction dataset 223
+7.5 Loading a pretrained LLM 226
+7.6 Fine-tuning the LLM on instruction data 229
+7.7 Extracting and saving responses 2337.8 Evaluating the fine-tuned LLM 238
+7.9 Conclusions 247
+What’s next? 247■Staying up to date in a fast-moving 
+field 248■Final words 248
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 20 ===
+xixabout the author
+SEBASTIAN  RASCHKA , PhD, has been working in machine learn-
+ing and AI for more than a decade. In addition to being aresearcher, Sebastian has a strong  passion for education. He is
+known for his bestselling book s on machine learning with
+Python and his contributions to open source.      Sebastian is a staff research engineer at Lightning AI, focus-
+ing on implementing and training LLMs. Before his industry
+experience, Sebastian was an assi stant professor in the Depart-
+ment of Statistics at the Univer sity of Wisconsi n-Madison, where
+he focused on deep learni ng research. You can learn more about Sebastian at https:/ /
+sebastianraschka.com .
+Licensed to Jason Walsh <manning@jwalsh.net>
+
+=== PAGE 30 ===
+9 1.4 Introducing the transformer architecture
+or hidden words in a given sentence, as shown in  figure 1.5. This unique training strategy
+equips BERT with strengths in text classifi cation tasks, includin g sentiment prediction
+and document categorization. As an application of its capabilit ies, as of this writing, X
+(formerly Twitter) uses BERT to detect toxic content.
+GPT, on the other hand, focuses on the de coder portion of the original transformer
+architecture and is designed for tasks that  require generating texts. This includes
+machine translation, text summarization, fiction writing, writing computer code,
+and more. 
+ GPT models, primarily designed and trai ned to perform text completion tasks,
+also show remarkable versatil ity in their capabilities. Th ese models are adept at exe-
+cuting both zero-shot and few-sh ot learning tasks. Zero-shot learning refers to the abil-
+ity to generalize to completely unseen ta sks without any prior specific examples. On
+the other hand, few-shot learning involves learning from a minimal number of exam-
+ples the user provides as in put, as shown in figure 1.6.Input textEncoder Decoder
+Preprocessing steps
+Input textPreprocessing stepsBERT GPT
+Receives inputs where words
+are randomly masked duringtrainingLearns to
+generate one
+word at a
+time
+This is an __ of how concise I __ beThis is an example of how concise I can be This is an example of how concise I can be
+This is an example of how concise I canFills in the
+missingwords togeneratethe originalsentence
+Receives incomplete texts
+Figure 1.5 A visual representation of the transfo rmer’s encoder and decoder submodules. On the left, the 
+encoder segment exemplifies BERT-like LLMs, which focus on masked word prediction and are primarily used for 
+tasks like text classification. On the right, the decoder segment showcases GPT-like LLMs, designed for 
+generative tasks and producing coherent text sequences.
+Licensed to Jason Walsh <manning@jwalsh.net>

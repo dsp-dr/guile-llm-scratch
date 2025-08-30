@@ -1,0 +1,69 @@
+# Fine-tuning Implementation Guide
+
+## Core Concept: Task Adaptation
+Fine-tuning adapts a pretrained model to specific tasks by:
+1. Adding task-specific layers (classification head)
+2. Training on task data with smaller learning rate
+3. Optionally freezing some layers
+
+## Functions to Implement in src/llm/finetune.scm
+
+### 1. create-classification-head
+```scheme
+(define-record-type <classification-head>
+  (make-classification-head input-dim num-classes dropout)
+  classification-head?
+  (input-dim head-input-dim)
+  (num-classes head-num-classes)
+  (dropout head-dropout))
+
+(define (create-classification-head input-dim num-classes)
+  "Create a classification head for fine-tuning"
+  ; Linear layer: input-dim -> num-classes
+  ; Add softmax for probabilities
+  )
+```
+
+### 2. finetune-model
+```scheme
+(define (finetune-model base-model train-data config)
+  "Main fine-tuning function"
+  ; 1. Add classification head to base model
+  ; 2. Optionally freeze base model parameters
+  ; 3. Train with small learning rate
+  ; 4. Use task-specific loss (cross-entropy for classification)
+  )
+```
+
+### 3. freeze-parameters
+```scheme
+(define (freeze-parameters model layer-names)
+  "Freeze specified layers during training"
+  ; Mark parameters as non-trainable
+  )
+```
+
+### 4. compute-classification-loss
+```scheme
+(define (compute-classification-loss predictions targets)
+  "Cross-entropy loss for classification"
+  ; Standard cross-entropy: -sum(target * log(prediction))
+  )
+```
+
+## Fine-tuning Process
+1. Load pretrained model (from Agent 3's training)
+2. Add task-specific head
+3. Freeze base layers (optional)
+4. Train with small learning rate (1e-5 to 1e-4)
+5. Evaluate on validation set
+
+## Example Usage
+```scheme
+(let* ((pretrained-model (load-checkpoint "model.scm"))
+       (head (create-classification-head 768 10))
+       (config '((learning-rate . 0.00005)
+                 (epochs . 3)
+                 (freeze-base . #t))))
+  (finetune-model pretrained-model train-data config))
+```

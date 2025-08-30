@@ -1,0 +1,66 @@
+# Attention Mechanism Implementation Guide
+
+## Core Concept: Self-Attention
+Attention mechanism allows the model to focus on different parts of the input sequence.
+
+**Formula**: Attention(Q,K,V) = softmax(QK^T/√d_k)V
+
+Where:
+- Q = Query matrix
+- K = Key matrix  
+- V = Value matrix
+- d_k = dimension of keys (for scaling)
+
+## Functions to Implement in src/llm/attention.scm
+
+### 1. scaled-dot-product-attention
+```scheme
+(define (scaled-dot-product-attention query key value mask)
+  "Core attention mechanism"
+  ; 1. Compute QK^T
+  ; 2. Scale by √d_k
+  ; 3. Apply mask (set masked positions to -inf)
+  ; 4. Apply softmax
+  ; 5. Multiply by V
+  )
+```
+
+### 2. multi-head-attention
+```scheme
+(define (multi-head-attention input num-heads d-model)
+  "Run attention with multiple heads in parallel"
+  ; 1. Split input into num-heads
+  ; 2. Apply scaled-dot-product-attention to each head
+  ; 3. Concatenate results
+  ; 4. Apply output projection
+  )
+```
+
+### 3. softmax
+```scheme
+(define (softmax x)
+  "Apply softmax function for stability"
+  ; Use max subtraction trick: softmax(x) = exp(x-max(x))/sum(exp(x-max(x)))
+  )
+```
+
+### 4. create-causal-mask
+```scheme
+(define (create-causal-mask seq-length)
+  "Create upper triangular mask to prevent looking at future tokens"
+  ; Create matrix where mask[i][j] = 0 if j > i, else 1
+  )
+```
+
+## Quick Start
+1. Implement softmax first (needed by attention)
+2. Implement scaled-dot-product-attention
+3. Add causal masking
+4. Build multi-head attention on top
+
+## Test Example
+```scheme
+; Simple test
+(let ((input '((1 0 0) (0 1 0) (0 0 1))))  ; Identity matrix
+  (scaled-dot-product-attention input input input #f))
+```

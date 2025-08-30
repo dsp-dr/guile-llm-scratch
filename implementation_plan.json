@@ -1,0 +1,152 @@
+{
+  "project": "Guile LLM Implementation",
+  "book_reference": "Build a Large Language Model (From Scratch)",
+  "modules": [
+    {
+      "name": "llm-fundamentals",
+      "path": "src/llm/fundamentals.scm",
+      "components": [
+        "tokenization",
+        "embeddings",
+        "model-architecture"
+      ],
+      "chapter": {
+        "number": 1,
+        "title": "Understanding Large Language Models",
+        "estimated_page": 1
+      }
+    },
+    {
+      "name": "text-processing",
+      "path": "src/llm/text.scm",
+      "components": [
+        "preprocessing",
+        "tokenizer",
+        "vocabulary"
+      ],
+      "chapter": {
+        "number": 2,
+        "title": "Working with Text Data",
+        "estimated_page": 20
+      }
+    },
+    {
+      "name": "attention",
+      "path": "src/llm/attention.scm",
+      "components": [
+        "self-attention",
+        "multi-head",
+        "positional-encoding"
+      ],
+      "chapter": {
+        "number": 3,
+        "title": "Attention Mechanisms",
+        "estimated_page": 50
+      }
+    },
+    {
+      "name": "gpt-model",
+      "path": "src/llm/gpt.scm",
+      "components": [
+        "transformer-block",
+        "model-layers",
+        "forward-pass"
+      ],
+      "chapter": {
+        "number": 4,
+        "title": "Implementing a GPT Model from Scratch",
+        "estimated_page": 80
+      }
+    },
+    {
+      "name": "pretraining",
+      "path": "src/llm/pretrain.scm",
+      "components": [
+        "data-loader",
+        "training-loop",
+        "loss-functions"
+      ],
+      "chapter": {
+        "number": 5,
+        "title": "Pretraining on Unlabeled Data",
+        "estimated_page": 120
+      }
+    },
+    {
+      "name": "fine-tuning",
+      "path": "src/llm/finetune.scm",
+      "components": [
+        "classification-head",
+        "task-specific-training"
+      ],
+      "chapter": {
+        "number": 6,
+        "title": "Fine-tuning for Classification",
+        "estimated_page": 160
+      }
+    },
+    {
+      "name": "instruction-tuning",
+      "path": "src/llm/instruction.scm",
+      "components": [
+        "prompt-engineering",
+        "rlhf",
+        "evaluation"
+      ],
+      "chapter": {
+        "number": 7,
+        "title": "Fine-tuning to Follow Instructions",
+        "estimated_page": 200
+      }
+    }
+  ],
+  "milestones": [
+    {
+      "phase": 1,
+      "name": "Foundation",
+      "chapters": [
+        1,
+        2
+      ],
+      "deliverables": [
+        "Basic tokenizer",
+        "Text preprocessing pipeline"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Core Architecture",
+      "chapters": [
+        3,
+        4
+      ],
+      "deliverables": [
+        "Attention mechanism",
+        "Basic GPT model structure"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Training",
+      "chapters": [
+        5
+      ],
+      "deliverables": [
+        "Training loop",
+        "Pretraining on sample data"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Application",
+      "chapters": [
+        6,
+        7
+      ],
+      "deliverables": [
+        "Fine-tuning capabilities",
+        "Instruction following"
+      ]
+    }
+  ]
+}
