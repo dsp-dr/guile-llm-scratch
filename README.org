@@ -16,13 +16,13 @@
 Pure Guile3 implementation of transformer-based language models from scratch. This project implements the complete LLM architecture including tensor operations, attention mechanisms, and training loops without any external machine learning dependencies - everything built using Scheme's functional programming paradigm.
 
 ** Key Features
-- 🧮 **Tensor Operations**: SRFI-4 optimized numerical arrays with broadcasting
-- 🔤 **BPE Tokenizer**: Byte-pair encoding implementation from scratch
-- 🎯 **Attention Mechanisms**: Multi-head scaled dot-product attention
-- 🤖 **Transformer Architecture**: Complete encoder/decoder implementation
-- 📚 **Literate Programming**: Org-mode with Babel for documentation-first development
-- 🧪 **Comprehensive Testing**: SRFI-64 test suites for all modules
-- 🚀 **Zero Dependencies**: Pure Scheme implementation, no external ML libraries
+- 🧮 *Tensor Operations*: SRFI-4 optimized numerical arrays with broadcasting
+- 🔤 *BPE Tokenizer*: Byte-pair encoding implementation from scratch
+- 🎯 *Attention Mechanisms*: Multi-head scaled dot-product attention
+- 🤖 *Transformer Architecture*: Complete encoder/decoder implementation
+- 📚 *Literate Programming*: Org-mode with Babel for documentation-first development
+- 🧪 *Comprehensive Testing*: SRFI-64 test suites for all modules
+- 🚀 *Zero Dependencies*: Pure Scheme implementation, no external ML libraries
 
 * Architecture
 
