@@ -5,7 +5,7 @@
 - **Route**: BOS → SEA (Boston Logan → Seattle-Tacoma)
 - **Date**: Saturday, August 30, 2025
 - **Departure**: 4:00 PM EDT (Boston)
-- **Arrival**: 10:15 PM PDT (Seattle)  
+- **Arrival**: 7:15 PM PDT (Seattle)  
 - **Duration**: 6 hours 15 minutes flight time
 - **Time Zone**: +3 hours (EDT → PDT)
 
@@ -23,7 +23,7 @@
 - **Now**: 12:05 PM EDT - 4 hours until departure
 - **Departure**: 4:00 PM EDT - Agents continue autonomously
 - **In-flight**: 6+ hours of autonomous development
-- **Landing**: 10:15 PM PDT (1:15 AM EDT)
+- **Landing**: 7:15 PM PDT (Seattle local time)
 - **Expected Progress**: ~60-80 more commits, 600+ new lines
 
 ## Pre-Flight Checklist (East Boston → Logan)
@@ -84,7 +84,7 @@
 
 ## Quick Recovery Commands
 
-### On Landing at SEA (10:15 PM PDT / 1:15 AM EDT)
+### On Landing at SEA (7:15 PM PDT)
 ```bash
 # SSH back to machine
 ssh nexushive
@@ -114,7 +114,7 @@ tmux kill-server  # Stop all agents
 - **Seats**: Window preferred for rest, aisle for work
 - **Power**: Most Alaska planes have outlets/USB
 - **WiFi**: Available for purchase (~$8-20)
-- **Time Zone**: Remember +3 hours (arrives 10:15 PM local, feels like 1:15 AM)
+- **Time Zone**: PDT is -3 hours from EDT (7:15 PM arrival in Seattle)
 
 ## Final Notes
 - Agents are fully autonomous and will continue throughout flight
