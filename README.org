@@ -2,14 +2,11 @@
 #+AUTHOR: DSP-DR Team
 #+DATE: 2025-08-20
 
-#+BEGIN_EXPORT html
-<p align="center">
-  <img src="https://img.shields.io/badge/guile-3.0.10+-blue.svg" alt="Guile 3.0.10+">
-  <img src="https://img.shields.io/badge/ML-transformer-purple.svg" alt="Transformer">
-  <img src="https://img.shields.io/badge/dependencies-zero-brightgreen.svg" alt="Zero Dependencies">
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License">
-</p>
-#+END_EXPORT
+[[https://img.shields.io/badge/guile-3.0.10+-blue.svg][https://img.shields.io/badge/guile-3.0.10+-blue.svg]]
+[[https://img.shields.io/badge/ML-transformer-purple.svg][https://img.shields.io/badge/ML-transformer-purple.svg]]
+[[https://img.shields.io/badge/dependencies-zero-brightgreen.svg][https://img.shields.io/badge/dependencies-zero-brightgreen.svg]]
+[[https://img.shields.io/badge/license-MIT-green.svg][https://img.shields.io/badge/license-MIT-green.svg]]
+[[https://img.shields.io/badge/lines-1.4k-orange.svg][https://img.shields.io/badge/lines-1.4k-orange.svg]]
 
 * Overview
 
