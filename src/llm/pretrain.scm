@@ -33,6 +33,7 @@
             create-adam-optimizer
             create-sgd-optimizer
             create-rmsprop-optimizer
+            create-optimizer-from-config
             adam-optimizer?
             sgd-optimizer?
             rmsprop-optimizer?
@@ -97,11 +98,11 @@
 
 ;;; Data Loading Functions
 
-(define (create-data-loader data #:key 
-                           (batch-size 32)
-                           (seq-length 256)
-                           (stride 256)
-                           (shuffle? #f))
+(define* (create-data-loader data #:key 
+                            (batch-size 32)
+                            (seq-length 256)
+                            (stride 256)
+                            (shuffle? #f))
   "Create a data loader for generating batches from tokenized data"
   (let ((processed-data (if shuffle? 
                             (shuffle-list data)
@@ -181,7 +182,7 @@
           (set-loader-current-pos! loader (+ current-pos (* batch-size stride)))
           batch))))
 
-(define (split-data data #:key (train-ratio 0.9) (val-ratio 0.05))
+(define* (split-data data #:key (train-ratio 0.9) (val-ratio 0.05))
   "Split data into train, validation, and test sets"
   (let* ((n (length data))
          (train-size (inexact->exact (floor (* n train-ratio))))
@@ -193,7 +194,7 @@
 
 ;;; Loss Functions
 
-(define (compute-cross-entropy-loss logits targets #:optional (mask #f))
+(define* (compute-cross-entropy-loss logits targets #:optional (mask #f))
   "Compute cross-entropy loss for language modeling"
   (let* ((batch-size (length logits))
          (seq-length (length (car logits)))
@@ -262,7 +263,7 @@
   (v adam-v set-adam-v!)
   (t adam-t set-adam-t!))
 
-(define (create-adam-optimizer #:key 
+(define* (create-adam-optimizer #:key 
                               (learning-rate 0.001)
                               (beta1 0.9)
                               (beta2 0.999)
@@ -311,7 +312,7 @@
   (nesterov sgd-nesterov)
   (v sgd-v set-sgd-v!))
 
-(define (create-sgd-optimizer #:key 
+(define* (create-sgd-optimizer #:key 
                               (learning-rate 0.01)
                               (momentum 0.0)
                               (weight-decay 0.0)
@@ -362,7 +363,7 @@
   (v rmsprop-v set-rmsprop-v!)
   (s rmsprop-s set-rmsprop-s!))
 
-(define (create-rmsprop-optimizer #:key 
+(define* (create-rmsprop-optimizer #:key 
                                   (learning-rate 0.01)
                                   (alpha 0.99)
                                   (epsilon 1e-8)
