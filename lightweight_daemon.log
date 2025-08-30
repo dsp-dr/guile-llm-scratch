@@ -193,3 +193,26 @@
 [main d1ce22a] feat: lightweight agent progress 10:00
  1 file changed, 214 insertions(+)
  create mode 100644 docs/book-decomposition.org
+[main 671b920] feat: lightweight agent progress 10:34
+ 21 files changed, 2844 insertions(+)
+ create mode 100644 agent_launch.log
+ create mode 100644 lightweight_daemon.log
+ create mode 100644 src/core/attention.scm
+ create mode 100644 src/core/example.scm
+ create mode 100644 src/core/tensor.scm
+ create mode 100644 src/core/tokenizer.scm
+ create mode 100644 src/core/transformer.scm
+ create mode 100644 src/llm/attention.scm
+ create mode 100644 src/llm/finetune.scm
+ create mode 100644 src/llm/fundamentals.scm
+ create mode 100644 src/llm/gpt.scm
+ create mode 100644 src/llm/instruction.scm
+ create mode 100644 src/llm/main.scm
+ create mode 100644 src/llm/text.scm
+ create mode 100644 tests/core/attention-test.scm
+ create mode 100644 tests/core/example-test.scm
+ create mode 100644 tests/core/tensor-test.scm
+ create mode 100644 tests/core/tokenizer-test.scm
+ create mode 100644 tests/core/transformer-test.scm
+ create mode 100644 tests/test-tokenizer.scm
+ create mode 100644 tokenizer-tests.log
