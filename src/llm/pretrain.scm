@@ -33,11 +33,24 @@
             create-adam-optimizer
             create-sgd-optimizer
             create-rmsprop-optimizer
+            create-adagrad-optimizer
             create-optimizer-from-config
             adam-optimizer?
             sgd-optimizer?
             rmsprop-optimizer?
-            optimizer-update!))
+            adagrad-optimizer?
+            optimizer-update!
+            
+            create-lr-scheduler
+            step-lr-scheduler
+            exponential-lr-scheduler
+            cosine-annealing-lr-scheduler
+            warmup-lr-scheduler
+            scheduler-step!
+            get-current-lr
+            
+            clip-gradients-by-norm
+            clip-gradients-by-value))
 
 ;;; Commentary:
 ;;;
@@ -49,8 +62,10 @@
 ;;; - training-loop with optimization
 ;;; - loss-functions (cross-entropy)
 ;;; - checkpoint management
-;;; - multiple optimizers (Adam, SGD, RMSprop)
-;;; - gradient clipping and parameter updates
+;;; - multiple optimizers (Adam, SGD, RMSprop, AdaGrad)
+;;; - gradient clipping (by norm and by value)
+;;; - learning rate scheduling (step, exponential, cosine, warmup)
+;;; - parameter updates
 ;;;
 
 ;;; Code:
@@ -240,7 +255,11 @@
        parameters))
 
 (define (clip-gradients gradients max-norm)
-  "Clip gradients by global norm"
+  "Clip gradients by global norm (deprecated, use clip-gradients-by-norm)"
+  (clip-gradients-by-norm gradients max-norm))
+
+(define (clip-gradients-by-norm gradients max-norm)
+  "Clip gradients by global norm to prevent gradient explosion"
   (let* ((flat-grads (apply append gradients))
          (grad-norm (sqrt (apply + (map (lambda (x) (* x x)) flat-grads)))))
     (if (> grad-norm max-norm)
@@ -249,6 +268,16 @@
                  (map (lambda (g) (* g scale)) grad-group))
                gradients))
         gradients)))
+
+(define (clip-gradients-by-value gradients min-value max-value)
+  "Clip gradient values to be within [min-value, max-value]"
+  (map (lambda (grad-group)
+         (map (lambda (g)
+                (cond ((< g min-value) min-value)
+                      ((> g max-value) max-value)
+                      (else g)))
+              grad-group))
+       gradients))
 
 ;;; Optimizer Implementation
 
@@ -410,6 +439,55 @@
                   param grad v-vec s-vec))
            parameters gradients v s))))
 
+;;; AdaGrad Optimizer Implementation
+
+(define-record-type <adagrad-optimizer>
+  (make-adagrad-optimizer learning-rate initial-accumulator-value epsilon weight-decay accum)
+  adagrad-optimizer?
+  (learning-rate adagrad-lr)
+  (initial-accumulator-value adagrad-initial-accum)
+  (epsilon adagrad-epsilon)
+  (weight-decay adagrad-weight-decay)
+  (accum adagrad-accum set-adagrad-accum!))
+
+(define* (create-adagrad-optimizer #:key 
+                                   (learning-rate 0.01)
+                                   (initial-accumulator-value 0.0)
+                                   (epsilon 1e-10)
+                                   (weight-decay 0.0))
+  "Create an AdaGrad optimizer"
+  (make-adagrad-optimizer learning-rate initial-accumulator-value epsilon weight-decay '()))
+
+(define (adagrad-update! optimizer parameters gradients)
+  "Update parameters using AdaGrad optimizer"
+  (let ((lr (adagrad-lr optimizer))
+        (epsilon (adagrad-epsilon optimizer))
+        (weight-decay (adagrad-weight-decay optimizer))
+        (initial-accum (adagrad-initial-accum optimizer)))
+    
+    ;; Initialize accumulator if needed
+    (when (null? (adagrad-accum optimizer))
+      (set-adagrad-accum! optimizer 
+        (map (lambda (p) (make-list (length p) initial-accum)) parameters)))
+    
+    (let ((accum (adagrad-accum optimizer)))
+      ;; Update each parameter
+      (map (lambda (param grad accum-vec)
+             (map (lambda (p g a)
+                    (let* (;; Apply weight decay if specified
+                           (effective-grad (if (> weight-decay 0)
+                                             (+ g (* weight-decay p))
+                                             g))
+                           ;; Update accumulator (sum of squared gradients)
+                           (new-accum (+ a (* effective-grad effective-grad)))
+                           ;; Compute adaptive learning rate
+                           (adaptive-lr (/ lr (+ (sqrt new-accum) epsilon)))
+                           ;; Compute parameter update
+                           (update (* adaptive-lr effective-grad)))
+                      (- p update)))
+                  param grad accum-vec))
+           parameters gradients accum))))
+
 ;;; Generic Optimizer Interface
 
 (define (create-optimizer-from-config config)
@@ -438,6 +516,12 @@
          #:weight-decay (or (assoc-ref opt-config 'weight-decay) 0.0)
          #:momentum (or (assoc-ref opt-config 'momentum) 0.0)
          #:centered (or (assoc-ref opt-config 'centered) #f)))
+      ((adagrad)
+       (create-adagrad-optimizer
+         #:learning-rate learning-rate
+         #:initial-accumulator-value (or (assoc-ref opt-config 'initial-accumulator-value) 0.0)
+         #:epsilon (or (assoc-ref opt-config 'epsilon) 1e-10)
+         #:weight-decay (or (assoc-ref opt-config 'weight-decay) 0.0)))
       (else (error "Unknown optimizer type in configuration:" optimizer-type)))))
 
 (define (optimizer-update! optimizer parameters gradients)
@@ -446,6 +530,7 @@
     ((adam-optimizer? optimizer) (adam-update! optimizer parameters gradients))
     ((sgd-optimizer? optimizer) (sgd-update! optimizer parameters gradients))
     ((rmsprop-optimizer? optimizer) (rmsprop-update! optimizer parameters gradients))
+    ((adagrad-optimizer? optimizer) (adagrad-update! optimizer parameters gradients))
     (else (error "Unknown optimizer type"))))
 
 (define (update-parameters parameters gradients optimizer)
@@ -511,6 +596,10 @@
      `(rmsprop ,(rmsprop-lr optimizer) ,(rmsprop-alpha optimizer) ,(rmsprop-epsilon optimizer)
                ,(rmsprop-weight-decay optimizer) ,(rmsprop-momentum optimizer) 
                ,(rmsprop-centered optimizer) ,(rmsprop-v optimizer) ,(rmsprop-s optimizer)))
+    ((adagrad-optimizer? optimizer)
+     `(adagrad ,(adagrad-lr optimizer) ,(adagrad-initial-accum optimizer) 
+               ,(adagrad-epsilon optimizer) ,(adagrad-weight-decay optimizer) 
+               ,(adagrad-accum optimizer)))
     (else (error "Unknown optimizer type for serialization"))))
 
 (define (save-checkpoint model optimizer training-state filename)
@@ -554,6 +643,13 @@
                                               (list-ref opt-state 6)
                                               (list-ref opt-state 7)
                                               (list-ref opt-state 8))))
+         optimizer))
+      ((adagrad)
+       (let ((optimizer (make-adagrad-optimizer (list-ref opt-state 1)
+                                              (list-ref opt-state 2)
+                                              (list-ref opt-state 3)
+                                              (list-ref opt-state 4)
+                                              (list-ref opt-state 5))))
          optimizer))
       (else (error "Unknown optimizer type in checkpoint")))))
 
