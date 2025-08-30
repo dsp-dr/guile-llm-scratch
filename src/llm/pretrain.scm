@@ -28,7 +28,15 @@
             state-epoch
             state-step
             state-loss
-            state-metrics))
+            state-metrics
+            
+            create-adam-optimizer
+            create-sgd-optimizer
+            create-rmsprop-optimizer
+            adam-optimizer?
+            sgd-optimizer?
+            rmsprop-optimizer?
+            optimizer-update!))
 
 ;;; Commentary:
 ;;;
@@ -40,6 +48,8 @@
 ;;; - training-loop with optimization
 ;;; - loss-functions (cross-entropy)
 ;;; - checkpoint management
+;;; - multiple optimizers (Adam, SGD, RMSprop)
+;;; - gradient clipping and parameter updates
 ;;;
 
 ;;; Code:
@@ -76,6 +86,8 @@
 (define default-config
   '((batch-size . 32)
     (learning-rate . 0.0001)
+    (optimizer . adam)
+    (optimizer-config . ((beta1 . 0.9) (beta2 . 0.999) (epsilon . 1e-8)))
     (num-epochs . 10)
     (warmup-steps . 1000)
     (gradient-clip . 1.0)
@@ -288,9 +300,156 @@
                   param grad m-vec v-vec))
            parameters gradients m v))))
 
+;;; SGD Optimizer Implementation
+
+(define-record-type <sgd-optimizer>
+  (make-sgd-optimizer learning-rate momentum weight-decay nesterov v)
+  sgd-optimizer?
+  (learning-rate sgd-lr)
+  (momentum sgd-momentum)
+  (weight-decay sgd-weight-decay)
+  (nesterov sgd-nesterov)
+  (v sgd-v set-sgd-v!))
+
+(define (create-sgd-optimizer #:key 
+                              (learning-rate 0.01)
+                              (momentum 0.0)
+                              (weight-decay 0.0)
+                              (nesterov #f))
+  "Create an SGD optimizer with optional momentum and Nesterov acceleration"
+  (make-sgd-optimizer learning-rate momentum weight-decay nesterov '()))
+
+(define (sgd-update! optimizer parameters gradients)
+  "Update parameters using SGD optimizer"
+  (let ((lr (sgd-lr optimizer))
+        (momentum (sgd-momentum optimizer))
+        (weight-decay (sgd-weight-decay optimizer))
+        (nesterov (sgd-nesterov optimizer)))
+    
+    ;; Initialize velocity if needed
+    (when (null? (sgd-v optimizer))
+      (set-sgd-v! optimizer (map (lambda (p) (make-list (length p) 0.0)) parameters)))
+    
+    (let ((v (sgd-v optimizer)))
+      ;; Update each parameter
+      (map (lambda (param grad v-vec)
+             (map (lambda (p g v-val)
+                    (let* (;; Apply weight decay if specified
+                           (effective-grad (if (> weight-decay 0)
+                                             (+ g (* weight-decay p))
+                                             g))
+                           ;; Update velocity
+                           (new-v (+ (* momentum v-val) effective-grad))
+                           ;; Compute parameter update
+                           (update (if nesterov
+                                     (* lr (+ effective-grad (* momentum new-v)))
+                                     (* lr new-v))))
+                      (- p update)))
+                  param grad v-vec))
+           parameters gradients v))))
+
+;;; RMSprop Optimizer Implementation
+
+(define-record-type <rmsprop-optimizer>
+  (make-rmsprop-optimizer learning-rate alpha epsilon weight-decay momentum centered v s)
+  rmsprop-optimizer?
+  (learning-rate rmsprop-lr)
+  (alpha rmsprop-alpha)
+  (epsilon rmsprop-epsilon)
+  (weight-decay rmsprop-weight-decay)
+  (momentum rmsprop-momentum)
+  (centered rmsprop-centered)
+  (v rmsprop-v set-rmsprop-v!)
+  (s rmsprop-s set-rmsprop-s!))
+
+(define (create-rmsprop-optimizer #:key 
+                                  (learning-rate 0.01)
+                                  (alpha 0.99)
+                                  (epsilon 1e-8)
+                                  (weight-decay 0.0)
+                                  (momentum 0.0)
+                                  (centered #f))
+  "Create an RMSprop optimizer"
+  (make-rmsprop-optimizer learning-rate alpha epsilon weight-decay momentum centered '() '()))
+
+(define (rmsprop-update! optimizer parameters gradients)
+  "Update parameters using RMSprop optimizer"
+  (let ((lr (rmsprop-lr optimizer))
+        (alpha (rmsprop-alpha optimizer))
+        (epsilon (rmsprop-epsilon optimizer))
+        (weight-decay (rmsprop-weight-decay optimizer))
+        (momentum (rmsprop-momentum optimizer))
+        (centered (rmsprop-centered optimizer)))
+    
+    ;; Initialize running averages if needed
+    (when (null? (rmsprop-v optimizer))
+      (set-rmsprop-v! optimizer (map (lambda (p) (make-list (length p) 0.0)) parameters))
+      (set-rmsprop-s! optimizer (map (lambda (p) (make-list (length p) 0.0)) parameters)))
+    
+    (let ((v (rmsprop-v optimizer))
+          (s (rmsprop-s optimizer)))
+      ;; Update each parameter
+      (map (lambda (param grad v-vec s-vec)
+             (map (lambda (p g v-val s-val)
+                    (let* (;; Apply weight decay if specified
+                           (effective-grad (if (> weight-decay 0)
+                                             (+ g (* weight-decay p))
+                                             g))
+                           ;; Update running average of squared gradients
+                           (new-s (+ (* alpha s-val) (* (- 1 alpha) (* effective-grad effective-grad))))
+                           ;; Compute denominator
+                           (denom (+ (sqrt new-s) epsilon))
+                           ;; Update velocity if using momentum
+                           (new-v (if (> momentum 0)
+                                    (+ (* momentum v-val) (/ effective-grad denom))
+                                    (/ effective-grad denom)))
+                           ;; Compute parameter update
+                           (update (* lr (if (> momentum 0) new-v (/ effective-grad denom)))))
+                      (- p update)))
+                  param grad v-vec s-vec))
+           parameters gradients v s))))
+
+;;; Generic Optimizer Interface
+
+(define (create-optimizer-from-config config)
+  "Create optimizer based on configuration"
+  (let ((optimizer-type (assoc-ref config 'optimizer))
+        (learning-rate (assoc-ref config 'learning-rate))
+        (opt-config (assoc-ref config 'optimizer-config)))
+    (case optimizer-type
+      ((adam)
+       (create-adam-optimizer 
+         #:learning-rate learning-rate
+         #:beta1 (or (assoc-ref opt-config 'beta1) 0.9)
+         #:beta2 (or (assoc-ref opt-config 'beta2) 0.999)
+         #:epsilon (or (assoc-ref opt-config 'epsilon) 1e-8)))
+      ((sgd)
+       (create-sgd-optimizer
+         #:learning-rate learning-rate
+         #:momentum (or (assoc-ref opt-config 'momentum) 0.0)
+         #:weight-decay (or (assoc-ref opt-config 'weight-decay) 0.0)
+         #:nesterov (or (assoc-ref opt-config 'nesterov) #f)))
+      ((rmsprop)
+       (create-rmsprop-optimizer
+         #:learning-rate learning-rate
+         #:alpha (or (assoc-ref opt-config 'alpha) 0.99)
+         #:epsilon (or (assoc-ref opt-config 'epsilon) 1e-8)
+         #:weight-decay (or (assoc-ref opt-config 'weight-decay) 0.0)
+         #:momentum (or (assoc-ref opt-config 'momentum) 0.0)
+         #:centered (or (assoc-ref opt-config 'centered) #f)))
+      (else (error "Unknown optimizer type in configuration:" optimizer-type)))))
+
+(define (optimizer-update! optimizer parameters gradients)
+  "Generic function to update parameters using any optimizer"
+  (cond 
+    ((adam-optimizer? optimizer) (adam-update! optimizer parameters gradients))
+    ((sgd-optimizer? optimizer) (sgd-update! optimizer parameters gradients))
+    ((rmsprop-optimizer? optimizer) (rmsprop-update! optimizer parameters gradients))
+    (else (error "Unknown optimizer type"))))
+
 (define (update-parameters parameters gradients optimizer)
-  "Update parameters using the optimizer"
-  (adam-update! optimizer parameters gradients))
+  "Update parameters using the optimizer (backward compatibility)"
+  (optimizer-update! optimizer parameters gradients))
 
 ;;; Training Loop
 
@@ -338,35 +497,78 @@
 
 ;;; Checkpoint Management
 
+(define (serialize-optimizer-state optimizer)
+  "Serialize optimizer state based on optimizer type"
+  (cond
+    ((adam-optimizer? optimizer)
+     `(adam ,(adam-lr optimizer) ,(adam-beta1 optimizer) ,(adam-beta2 optimizer) 
+            ,(adam-epsilon optimizer) ,(adam-m optimizer) ,(adam-v optimizer) ,(adam-t optimizer)))
+    ((sgd-optimizer? optimizer)
+     `(sgd ,(sgd-lr optimizer) ,(sgd-momentum optimizer) ,(sgd-weight-decay optimizer) 
+           ,(sgd-nesterov optimizer) ,(sgd-v optimizer)))
+    ((rmsprop-optimizer? optimizer)
+     `(rmsprop ,(rmsprop-lr optimizer) ,(rmsprop-alpha optimizer) ,(rmsprop-epsilon optimizer)
+               ,(rmsprop-weight-decay optimizer) ,(rmsprop-momentum optimizer) 
+               ,(rmsprop-centered optimizer) ,(rmsprop-v optimizer) ,(rmsprop-s optimizer)))
+    (else (error "Unknown optimizer type for serialization"))))
+
 (define (save-checkpoint model optimizer training-state filename)
   "Save model checkpoint to file"
   (call-with-output-file filename
     (lambda (port)
       (write `((model-params . ,(model 'get-parameters))
-               (optimizer-state . ,(list (adam-m optimizer)
-                                       (adam-v optimizer)
-                                       (adam-t optimizer)))
+               (optimizer-state . ,(serialize-optimizer-state optimizer))
                (training-state . ,(list (state-epoch training-state)
                                       (state-step training-state)
                                       (state-loss training-state)
                                       (state-metrics training-state))))
              port))))
 
-(define (load-checkpoint filename model optimizer)
-  "Load model checkpoint from file"
+(define (deserialize-optimizer-state opt-state)
+  "Deserialize optimizer state and create appropriate optimizer"
+  (let ((opt-type (car opt-state)))
+    (case opt-type
+      ((adam)
+       (let ((optimizer (make-adam-optimizer (list-ref opt-state 1) 
+                                           (list-ref opt-state 2)
+                                           (list-ref opt-state 3)
+                                           (list-ref opt-state 4)
+                                           (list-ref opt-state 5)
+                                           (list-ref opt-state 6)
+                                           (list-ref opt-state 7))))
+         optimizer))
+      ((sgd)
+       (let ((optimizer (make-sgd-optimizer (list-ref opt-state 1)
+                                          (list-ref opt-state 2)
+                                          (list-ref opt-state 3)
+                                          (list-ref opt-state 4)
+                                          (list-ref opt-state 5))))
+         optimizer))
+      ((rmsprop)
+       (let ((optimizer (make-rmsprop-optimizer (list-ref opt-state 1)
+                                              (list-ref opt-state 2)
+                                              (list-ref opt-state 3)
+                                              (list-ref opt-state 4)
+                                              (list-ref opt-state 5)
+                                              (list-ref opt-state 6)
+                                              (list-ref opt-state 7)
+                                              (list-ref opt-state 8))))
+         optimizer))
+      (else (error "Unknown optimizer type in checkpoint")))))
+
+(define (load-checkpoint filename model)
+  "Load model checkpoint from file and return optimizer and training state"
   (call-with-input-file filename
     (lambda (port)
       (let ((checkpoint (read port)))
         (model 'set-parameters (assoc-ref checkpoint 'model-params))
-        (let ((opt-state (assoc-ref checkpoint 'optimizer-state)))
-          (set-adam-m! optimizer (list-ref opt-state 0))
-          (set-adam-v! optimizer (list-ref opt-state 1))
-          (set-adam-t! optimizer (list-ref opt-state 2)))
-        (let ((train-state (assoc-ref checkpoint 'training-state)))
-          (make-training-state (list-ref train-state 0)
-                              (list-ref train-state 1)
-                              (list-ref train-state 2)
-                              (list-ref train-state 3)))))))
+        (let ((optimizer (deserialize-optimizer-state (assoc-ref checkpoint 'optimizer-state)))
+              (train-state-data (assoc-ref checkpoint 'training-state)))
+          (values optimizer
+                  (make-training-state (list-ref train-state-data 0)
+                                      (list-ref train-state-data 1)
+                                      (list-ref train-state-data 2)
+                                      (list-ref train-state-data 3))))))))
 
 ;;; Main Pretraining Function
 
@@ -396,7 +598,7 @@
                                            #:seq-length seq-length
                                            #:stride stride
                                            #:shuffle? #f))
-            (optimizer (create-adam-optimizer #:learning-rate learning-rate))
+            (optimizer (create-optimizer-from-config config))
             (training-state (make-training-state 0 0 0.0 '())))
         
         ;; Training loop
