@@ -1,0 +1,110 @@
+#+TITLE: Coordinator Resurrection Protocol
+#+AUTHOR: DSP-DR Team  
+#+DATE: 2025-08-30
+
+* Emergency Coordinator Recovery
+
+If the main coordinator session dies (terminal killed, connection lost), use this guide to resume autonomous operation.
+
+** Quick Recovery Command
+#+BEGIN_SRC bash
+# From project directory
+cd /home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch
+claude -c
+#+END_SRC
+
+** Full Status Check
+#+BEGIN_SRC bash
+# 1. Check project location
+pwd  # Should be /home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch
+
+# 2. Verify agent sessions are running
+tmux list-sessions | grep llm-
+
+# Expected sessions:
+# - llm-foundation (Agent 1)
+# - llm-architecture (Agent 2) 
+# - llm-training (Agent 3)
+# - llm-application (Agent 4)
+# - llm-coordinator (if needed)
+
+# 3. Check daemon status
+ps aux | grep 62349  # Lightweight daemon PID
+
+# 4. Check recent commits
+git log --oneline -10
+
+# 5. Check current line count
+find src/llm -name "*.scm" -exec wc -l {} \; | awk '{total += $1} END {print "Total:", total}'
+#+END_SRC
+
+** Current Mission Context
+- *Project*: Pure Guile LLM implementation from scratch
+- *Status*: 1,367+ lines, 5/8 modules complete
+- *Flight*: BOS→SEA autonomous development session
+- *Agents*: 4 agents working in parallel on different modules
+- *Daemon*: PID 62349 auto-nudging every 3 minutes with auto-commits
+
+** Agent Session Recovery
+If any agent sessions are missing:
+#+BEGIN_SRC bash
+# Restart missing sessions (adjust as needed)
+./setup_tmux_agents.sh
+
+# Or manually:
+tmux new-session -d -s llm-foundation -c /home/dsp-dr/ghq/github.com/dsp-dr/guile-llm-scratch
+tmux send-keys -t llm-foundation "claude --dangerously-skip-permissions" C-m
+#+END_SRC
+
+** Daemon Recovery
+If daemon PID 62349 is not running:
+#+BEGIN_SRC bash
+# Check if old process exists
+ps aux | grep "lightweight agent progress"
+
+# Kill any stale processes
+pkill -f "lightweight agent progress"
+
+# Restart daemon
+./keep_agents_running.sh &
+echo $! > daemon.pid
+#+END_SRC
+
+** Critical Context for Coordinator
+1. *Implementation Phase*: Active development during flight
+2. *Agent Assignments*:
+   - Agent 1: fundamentals.scm, text.scm (tokenization, preprocessing)  
+   - Agent 2: attention.scm, gpt.scm (attention, transformers)
+   - Agent 3: pretrain.scm (optimizers, training loops)
+   - Agent 4: finetune.scm, instruction.scm (fine-tuning, instruction)
+
+3. *Key Files*:
+   - =src/llm/*.scm= - Main implementation files
+   - =agent_resources/*_guide.txt= - 2KB lightweight guides for agents
+   - =docs/book-decomposition.org= - Complete decomposition strategy
+   - =lightweight_daemon.log= - Autonomous operation log
+
+4. *Current Goals*:
+   - Complete GPT transformer implementation (Agent 2)
+   - Finish instruction tuning module (Agent 4)
+   - Integrate all modules in main.scm
+   - Target: 2000+ lines by landing
+
+** Communication Channels
+- *GitHub*: https://github.com/dsp-dr/guile-llm-scratch
+- *Keybase*: Message sent to jwalsh with progress updates
+- *Local*: All book content in book_chapters/ (git ignored)
+
+** Emergency Commands
+#+BEGIN_SRC bash
+# Stop everything
+tmux kill-server
+kill $(cat daemon.pid 2>/dev/null || echo 62349) 2>/dev/null
+
+# Quick restart
+./START_AUTONOMOUS_FLIGHT_MODE.sh
+
+# Check progress
+git log --oneline --since="2 hours ago"
+find src/llm -name "*.scm" -exec wc -l {} \;
+#+END_SRC
