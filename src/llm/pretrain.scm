@@ -1,0 +1,436 @@
+;;; pretraining.scm --- Pretraining on Unlabeled Data
+;;; Chapter 5: Implementation
+
+(define-module (llm pretraining)
+  #:use-module (ice-9 match)
+  #:use-module (ice-9 textual-ports)
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-43)
+  #:use-module (rnrs bytevectors)
+  #:export (create-data-loader
+            train-epoch
+            validate
+            save-checkpoint
+            load-checkpoint
+            compute-loss
+            update-parameters
+            pretrain-model
+            
+            make-batch
+            batch?
+            batch-input-ids
+            batch-target-ids
+            batch-mask
+            
+            make-training-state
+            training-state?
+            state-epoch
+            state-step
+            state-loss
+            state-metrics))
+
+;;; Commentary:
+;;;
+;;; This module implements concepts from Chapter 5
+;;; of "Build a Large Language Model (From Scratch)"
+;;;
+;;; Components implemented:
+;;; - data-loader with batch generation
+;;; - training-loop with optimization
+;;; - loss-functions (cross-entropy)
+;;; - checkpoint management
+;;;
+
+;;; Code:
+
+;;; Data Structures
+
+(define-record-type <batch>
+  (make-batch input-ids target-ids mask)
+  batch?
+  (input-ids batch-input-ids)
+  (target-ids batch-target-ids)
+  (mask batch-mask))
+
+(define-record-type <training-state>
+  (make-training-state epoch step loss metrics)
+  training-state?
+  (epoch state-epoch set-state-epoch!)
+  (step state-step set-state-step!)
+  (loss state-loss set-state-loss!)
+  (metrics state-metrics set-state-metrics!))
+
+(define-record-type <data-loader>
+  (%make-data-loader data batch-size seq-length stride shuffle? current-pos)
+  data-loader?
+  (data loader-data)
+  (batch-size loader-batch-size)
+  (seq-length loader-seq-length)
+  (stride loader-stride)
+  (shuffle? loader-shuffle?)
+  (current-pos loader-current-pos set-loader-current-pos!))
+
+;;; Training Configuration
+
+(define default-config
+  '((batch-size . 32)
+    (learning-rate . 0.0001)
+    (num-epochs . 10)
+    (warmup-steps . 1000)
+    (gradient-clip . 1.0)
+    (checkpoint-interval . 1000)
+    (seq-length . 256)
+    (stride . 256)))
+
+;;; Data Loading Functions
+
+(define (create-data-loader data #:key 
+                           (batch-size 32)
+                           (seq-length 256)
+                           (stride 256)
+                           (shuffle? #f))
+  "Create a data loader for generating batches from tokenized data"
+  (let ((processed-data (if shuffle? 
+                            (shuffle-list data)
+                            data)))
+    (%make-data-loader processed-data
+                       batch-size
+                       seq-length
+                       stride
+                       shuffle?
+                       0)))
+
+(define (shuffle-list lst)
+  "Randomly shuffle a list"
+  (let ((vec (list->vector lst)))
+    (do ((i (- (vector-length vec) 1) (- i 1)))
+        ((< i 1) (vector->list vec))
+      (let* ((j (random (+ i 1)))
+             (tmp (vector-ref vec i)))
+        (vector-set! vec i (vector-ref vec j))
+        (vector-set! vec j tmp)))))
+
+(define (create-batch-from-sequences sequences pad-token)
+  "Create a batch from sequences with padding"
+  (let* ((batch-size (length sequences))
+         (max-len (apply max (map length sequences)))
+         (input-ids (make-list batch-size '()))
+         (target-ids (make-list batch-size '()))
+         (masks (make-list batch-size '())))
+    
+    (let loop ((seqs sequences)
+               (inputs '())
+               (targets '())
+               (masks '()))
+      (if (null? seqs)
+          (make-batch (reverse inputs)
+                      (reverse targets)
+                      (reverse masks))
+          (let* ((seq (car seqs))
+                 (padded-seq (pad-sequence seq max-len pad-token))
+                 (input (take padded-seq (- max-len 1)))
+                 (target (drop padded-seq 1))
+                 (mask (map (lambda (x) (if (= x pad-token) 0 1)) padded-seq)))
+            (loop (cdr seqs)
+                  (cons input inputs)
+                  (cons target targets)
+                  (cons mask masks)))))))
+
+(define (pad-sequence seq target-length pad-token)
+  "Pad a sequence to target length with pad token"
+  (let ((current-length (length seq)))
+    (if (>= current-length target-length)
+        (take seq target-length)
+        (append seq (make-list (- target-length current-length) pad-token)))))
+
+(define (get-next-batch loader)
+  "Get the next batch from the data loader"
+  (let* ((data (loader-data loader))
+         (batch-size (loader-batch-size loader))
+         (seq-length (loader-seq-length loader))
+         (stride (loader-stride loader))
+         (current-pos (loader-current-pos loader))
+         (data-length (length data)))
+    
+    (if (>= current-pos data-length)
+        #f  ; End of data
+        (let* ((batch-sequences
+                (let loop ((i 0) (sequences '()))
+                  (if (or (>= i batch-size)
+                          (>= (+ current-pos (* i stride) seq-length) data-length))
+                      (reverse sequences)
+                      (let* ((start (+ current-pos (* i stride)))
+                             (end (min (+ start seq-length) data-length))
+                             (seq (list-head (list-tail data start) (- end start))))
+                        (loop (+ i 1) (cons seq sequences))))))
+               (batch (create-batch-from-sequences batch-sequences 0))) ; Using 0 as pad token
+          
+          (set-loader-current-pos! loader (+ current-pos (* batch-size stride)))
+          batch))))
+
+(define (split-data data #:key (train-ratio 0.9) (val-ratio 0.05))
+  "Split data into train, validation, and test sets"
+  (let* ((n (length data))
+         (train-size (inexact->exact (floor (* n train-ratio))))
+         (val-size (inexact->exact (floor (* n val-ratio))))
+         (train-data (take data train-size))
+         (val-data (take (drop data train-size) val-size))
+         (test-data (drop data (+ train-size val-size))))
+    (values train-data val-data test-data)))
+
+;;; Loss Functions
+
+(define (compute-cross-entropy-loss logits targets #:optional (mask #f))
+  "Compute cross-entropy loss for language modeling"
+  (let* ((batch-size (length logits))
+         (seq-length (length (car logits)))
+         (vocab-size (length (car (car logits))))
+         (total-loss 0.0)
+         (count 0))
+    
+    (do ((b 0 (+ b 1)))
+        ((>= b batch-size))
+      (do ((t 0 (+ t 1)))
+          ((>= t seq-length))
+        (when (or (not mask) 
+                  (> (list-ref (list-ref mask b) t) 0))
+          (let* ((logit-vec (list-ref (list-ref logits b) t))
+                 (target (list-ref (list-ref targets b) t))
+                 (max-logit (apply max logit-vec))
+                 (exp-logits (map (lambda (x) (exp (- x max-logit))) logit-vec))
+                 (sum-exp (apply + exp-logits))
+                 (log-prob (- (list-ref logit-vec target) (log sum-exp))))
+            (set! total-loss (- total-loss log-prob))
+            (set! count (+ count 1))))))
+    
+    (if (> count 0)
+        (/ total-loss count)
+        0.0)))
+
+(define (compute-loss batch model-forward)
+  "Compute loss for a batch using the model"
+  (let* ((input-ids (batch-input-ids batch))
+         (target-ids (batch-target-ids batch))
+         (mask (batch-mask batch))
+         (logits (model-forward input-ids)))
+    (compute-cross-entropy-loss logits target-ids mask)))
+
+;;; Gradient Computation (Simplified)
+
+(define (compute-gradients loss parameters)
+  "Compute gradients for parameters (simplified stub)"
+  ;; In a real implementation, this would use automatic differentiation
+  ;; For now, return random small gradients for testing
+  (map (lambda (param)
+         (map (lambda (x) (* 0.001 (- (random:uniform) 0.5))) param))
+       parameters))
+
+(define (clip-gradients gradients max-norm)
+  "Clip gradients by global norm"
+  (let* ((flat-grads (apply append gradients))
+         (grad-norm (sqrt (apply + (map (lambda (x) (* x x)) flat-grads)))))
+    (if (> grad-norm max-norm)
+        (let ((scale (/ max-norm grad-norm)))
+          (map (lambda (grad-group)
+                 (map (lambda (g) (* g scale)) grad-group))
+               gradients))
+        gradients)))
+
+;;; Optimizer Implementation
+
+(define-record-type <adam-optimizer>
+  (make-adam-optimizer learning-rate beta1 beta2 epsilon m v t)
+  adam-optimizer?
+  (learning-rate adam-lr)
+  (beta1 adam-beta1)
+  (beta2 adam-beta2)
+  (epsilon adam-epsilon)
+  (m adam-m set-adam-m!)
+  (v adam-v set-adam-v!)
+  (t adam-t set-adam-t!))
+
+(define (create-adam-optimizer #:key 
+                              (learning-rate 0.001)
+                              (beta1 0.9)
+                              (beta2 0.999)
+                              (epsilon 1e-8))
+  "Create an Adam optimizer"
+  (make-adam-optimizer learning-rate beta1 beta2 epsilon '() '() 0))
+
+(define (adam-update! optimizer parameters gradients)
+  "Update parameters using Adam optimizer"
+  (let ((lr (adam-lr optimizer))
+        (beta1 (adam-beta1 optimizer))
+        (beta2 (adam-beta2 optimizer))
+        (epsilon (adam-epsilon optimizer))
+        (t (+ (adam-t optimizer) 1)))
+    
+    (set-adam-t! optimizer t)
+    
+    ;; Initialize momentum vectors if needed
+    (when (null? (adam-m optimizer))
+      (set-adam-m! optimizer (map (lambda (p) (make-list (length p) 0.0)) parameters))
+      (set-adam-v! optimizer (map (lambda (p) (make-list (length p) 0.0)) parameters)))
+    
+    (let ((m (adam-m optimizer))
+          (v (adam-v optimizer))
+          (lr-t (* lr (/ (sqrt (- 1 (expt beta2 t)))
+                        (- 1 (expt beta1 t))))))
+      
+      ;; Update each parameter
+      (map (lambda (param grad m-vec v-vec)
+             (map (lambda (p g m-val v-val)
+                    (let* ((new-m (+ (* beta1 m-val) (* (- 1 beta1) g)))
+                           (new-v (+ (* beta2 v-val) (* (- 1 beta2) (* g g))))
+                           (update (/ (* lr-t new-m) (+ (sqrt new-v) epsilon))))
+                      (- p update)))
+                  param grad m-vec v-vec))
+           parameters gradients m v))))
+
+(define (update-parameters parameters gradients optimizer)
+  "Update parameters using the optimizer"
+  (adam-update! optimizer parameters gradients))
+
+;;; Training Loop
+
+(define (train-epoch model train-loader optimizer device)
+  "Train for one epoch"
+  (let ((total-loss 0.0)
+        (num-batches 0))
+    
+    (let loop ((batch (get-next-batch train-loader)))
+      (when batch
+        (let* ((loss (compute-loss batch model))
+               (gradients (compute-gradients loss (model 'get-parameters))))
+          
+          ;; Clip gradients
+          (let ((clipped-grads (clip-gradients gradients 1.0)))
+            ;; Update parameters
+            (let ((new-params (update-parameters (model 'get-parameters) 
+                                                clipped-grads 
+                                                optimizer)))
+              (model 'set-parameters new-params)))
+          
+          (set! total-loss (+ total-loss loss))
+          (set! num-batches (+ num-batches 1))
+          (loop (get-next-batch train-loader)))))
+    
+    (if (> num-batches 0)
+        (/ total-loss num-batches)
+        0.0)))
+
+(define (validate model val-loader)
+  "Validate the model on validation data"
+  (let ((total-loss 0.0)
+        (num-batches 0))
+    
+    (let loop ((batch (get-next-batch val-loader)))
+      (when batch
+        (let ((loss (compute-loss batch model)))
+          (set! total-loss (+ total-loss loss))
+          (set! num-batches (+ num-batches 1))
+          (loop (get-next-batch val-loader)))))
+    
+    (if (> num-batches 0)
+        (/ total-loss num-batches)
+        0.0)))
+
+;;; Checkpoint Management
+
+(define (save-checkpoint model optimizer training-state filename)
+  "Save model checkpoint to file"
+  (call-with-output-file filename
+    (lambda (port)
+      (write `((model-params . ,(model 'get-parameters))
+               (optimizer-state . ,(list (adam-m optimizer)
+                                       (adam-v optimizer)
+                                       (adam-t optimizer)))
+               (training-state . ,(list (state-epoch training-state)
+                                      (state-step training-state)
+                                      (state-loss training-state)
+                                      (state-metrics training-state))))
+             port))))
+
+(define (load-checkpoint filename model optimizer)
+  "Load model checkpoint from file"
+  (call-with-input-file filename
+    (lambda (port)
+      (let ((checkpoint (read port)))
+        (model 'set-parameters (assoc-ref checkpoint 'model-params))
+        (let ((opt-state (assoc-ref checkpoint 'optimizer-state)))
+          (set-adam-m! optimizer (list-ref opt-state 0))
+          (set-adam-v! optimizer (list-ref opt-state 1))
+          (set-adam-t! optimizer (list-ref opt-state 2)))
+        (let ((train-state (assoc-ref checkpoint 'training-state)))
+          (make-training-state (list-ref train-state 0)
+                              (list-ref train-state 1)
+                              (list-ref train-state 2)
+                              (list-ref train-state 3)))))))
+
+;;; Main Pretraining Function
+
+(define* (pretrain-model model data config #:key 
+                        (checkpoint-dir "./checkpoints")
+                        (device 'cpu))
+  "Main pretraining function"
+  (let* ((batch-size (assoc-ref config 'batch-size))
+         (num-epochs (assoc-ref config 'num-epochs))
+         (learning-rate (assoc-ref config 'learning-rate))
+         (checkpoint-interval (assoc-ref config 'checkpoint-interval))
+         (seq-length (assoc-ref config 'seq-length))
+         (stride (assoc-ref config 'stride)))
+    
+    ;; Split data
+    (let-values (((train-data val-data test-data) 
+                  (split-data data #:train-ratio 0.9 #:val-ratio 0.05)))
+      
+      ;; Create data loaders
+      (let ((train-loader (create-data-loader train-data 
+                                             #:batch-size batch-size
+                                             #:seq-length seq-length
+                                             #:stride stride
+                                             #:shuffle? #t))
+            (val-loader (create-data-loader val-data
+                                           #:batch-size batch-size
+                                           #:seq-length seq-length
+                                           #:stride stride
+                                           #:shuffle? #f))
+            (optimizer (create-adam-optimizer #:learning-rate learning-rate))
+            (training-state (make-training-state 0 0 0.0 '())))
+        
+        ;; Training loop
+        (do ((epoch 0 (+ epoch 1)))
+            ((>= epoch num-epochs))
+          
+          (format #t "Epoch ~a/~a~%" (+ epoch 1) num-epochs)
+          
+          ;; Train
+          (let ((train-loss (train-epoch model train-loader optimizer device)))
+            (format #t "  Train Loss: ~,4f~%" train-loss)
+            
+            ;; Validate
+            (let ((val-loss (validate model val-loader)))
+              (format #t "  Val Loss: ~,4f~%" val-loss)
+              
+              ;; Update training state
+              (set-state-epoch! training-state (+ epoch 1))
+              (set-state-loss! training-state val-loss)
+              
+              ;; Save checkpoint if needed
+              (when (zero? (modulo (state-step training-state) checkpoint-interval))
+                (let ((checkpoint-file (format #f "~a/checkpoint_epoch_~a.scm" 
+                                              checkpoint-dir epoch)))
+                  (save-checkpoint model optimizer training-state checkpoint-file)
+                  (format #t "  Saved checkpoint: ~a~%" checkpoint-file))))))
+        
+        training-state))))
+
+;;; Helper function for assoc-ref
+(define (assoc-ref alist key)
+  (let ((entry (assoc key alist)))
+    (if entry
+        (cdr entry)
+        #f)))
+
+;;; pretraining.scm ends here
