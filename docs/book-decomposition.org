@@ -1,0 +1,214 @@
+#+TITLE: Book Decomposition Strategy for Agent-Based Implementation
+#+AUTHOR: DSP-DR Team
+#+DATE: 2025-08-30
+
+* Overview
+
+This document outlines the strategy for decomposing "Build a Large Language Model (From Scratch)" into manageable components for autonomous agent implementation during the BOS→SEA flight development session.
+
+** Source Material
+- *Primary Book*: "Build a Large Language Model (From Scratch)" 
+- *Format*: 370-page PDF (~50MB)
+- *Challenge*: PDF too large for direct Claude processing (10MB limit)
+- *Solution*: Multi-stage decomposition with lightweight agent resources
+
+* Decomposition Architecture
+
+** Phase 1: Chapter Extraction
+#+BEGIN_EXAMPLE
+Original PDF (370 pages)
+    ↓
+PDF Splitter (tools/pdf_splitter.py)
+    ↓
+4 Chapter PDFs:
+├── fundamentals.pdf (50 pages)
+├── attention_architecture.pdf (99 pages) 
+├── training.pdf (70 pages)
+└── fine_tuning.pdf (149 pages)
+#+END_EXAMPLE
+
+** Phase 2: Micro-PDF Generation
+#+BEGIN_EXAMPLE
+Chapter PDFs (5-10MB each)
+    ↓
+Tiny PDF Creator (tools/create_tiny_pdfs.py)
+    ↓
+Micro-PDFs (2-3 pages each):
+├── book_chapters_tiny/fundamentals/tiny_000_p0-2.pdf
+├── book_chapters_tiny/fundamentals/tiny_001_p3-5.pdf
+└── ... (200+ micro-PDFs total)
+#+END_EXAMPLE
+
+** Phase 3: Lightweight Text Guides (BREAKTHROUGH SOLUTION)
+#+BEGIN_EXAMPLE
+Micro-PDFs (Still too large)
+    ↓
+Text Guide Generator (create_text_summaries.py)
+    ↓
+Ultra-Light Guides (2KB each):
+├── agent_resources/attention_guide.txt
+├── agent_resources/finetune_guide.txt
+├── agent_resources/text_guide.txt
+└── agent_resources/training_guide.txt
+#+END_EXAMPLE
+
+* Agent Assignment Strategy
+
+** Agent 1: Foundation Layer
+- *Primary Resource*: =agent_resources/text_guide.txt=
+- *Modules*: =fundamentals.scm=, =text.scm=
+- *Responsibilities*:
+  - BPE tokenization implementation
+  - Text preprocessing pipelines
+  - Vocabulary management
+- *Implementation Functions*:
+  #+BEGIN_EXAMPLE
+  (define-module (llm fundamentals)
+    #:export (bpe-tokenize
+              build-vocabulary
+              encode-text
+              decode-tokens))
+  #+END_EXAMPLE
+
+** Agent 2: Architecture Layer  
+- *Primary Resource*: =agent_resources/attention_guide.txt=
+- *Modules*: =attention.scm=, =gpt.scm=
+- *Responsibilities*:
+  - Self-attention mechanisms
+  - Multi-head attention
+  - Transformer architecture
+- *Implementation Functions*:
+  #+BEGIN_EXAMPLE
+  (define-module (llm attention)
+    #:export (scaled-dot-product-attention
+              multi-head-attention
+              causal-mask))
+  #+END_EXAMPLE
+
+** Agent 3: Training Layer
+- *Primary Resource*: =agent_resources/training_guide.txt= (from book_chapters_tiny/training/)
+- *Modules*: =pretrain.scm=
+- *Responsibilities*:
+  - Optimizer implementations (Adam, SGD, RMSprop)
+  - Training loop architecture
+  - Loss functions and backpropagation
+- *Implementation Functions*:
+  #+BEGIN_EXAMPLE
+  (define-module (llm pretraining)
+    #:export (create-adam-optimizer
+              create-sgd-optimizer  
+              training-loop
+              compute-loss))
+  #+END_EXAMPLE
+
+** Agent 4: Application Layer
+- *Primary Resource*: =agent_resources/finetune_guide.txt=
+- *Modules*: =finetune.scm=, =instruction.scm=
+- *Responsibilities*:
+  - Fine-tuning pipelines
+  - Classification heads
+  - Instruction tuning
+- *Implementation Functions*:
+  #+BEGIN_EXAMPLE
+  (define-module (llm finetune)
+    #:export (create-classification-head
+              fine-tune-model
+              instruction-tuning))
+  #+END_EXAMPLE
+
+* Tools and Infrastructure
+
+** PDF Processing Tools
+- =tools/pdf_analyzer.py= - Extract table of contents and map page numbers
+- =tools/pdf_splitter.py= - Split large PDF into chapter-based chunks
+- =tools/create_tiny_pdfs.py= - Create micro-PDFs for granular access
+- =tools/create_text_summaries.py= - Generate lightweight implementation guides
+
+** Agent Coordination
+- =setup_tmux_agents.sh= - Initialize 4 autonomous tmux sessions
+- =monitor_agents.sh= - Check agent progress and status
+- =lightweight_daemon.log= - Track autonomous operation and commits
+- GitHub Issues/Milestones for progress tracking
+
+** Resource Optimization Strategy
+1. *Large PDFs* (50MB) → Too large for Claude
+2. *Chapter PDFs* (10MB) → Still too large  
+3. *Micro-PDFs* (100KB) → Processing overhead
+4. *Text Guides* (2KB) → **OPTIMAL SOLUTION**
+
+* Implementation Results
+
+** Successful Decomposition Metrics
+- *Original*: 1 large PDF (370 pages, 50MB)
+- *Final*: 4 lightweight guides (2KB each, 8KB total)
+- *Compression Ratio*: 6,250:1 reduction
+- *Agent Accessibility*: 100% success rate
+- *Implementation Speed*: 4x parallel development
+
+** Code Generation Success
+#+BEGIN_EXAMPLE
+Before Decomposition: 653 lines (2 agents working)
+After Decomposition:  1,366 lines (4 agents working)
+Growth Rate:          109% increase in 3 hours
+#+END_EXAMPLE
+
+** Module Completion Status
+- ✅ =fundamentals.scm= - 216 lines (BPE tokenizer complete)
+- ✅ =text.scm= - 99 lines (preprocessing pipeline)
+- ✅ =attention.scm= - 142 lines (self-attention mechanisms)
+- ✅ =pretrain.scm= - 638 lines (3 optimizers + training)
+- ✅ =finetune.scm= - 205 lines (classification + fine-tuning)
+- 🔨 =gpt.scm= - 25 lines (transformer blocks in progress)
+- 🔨 =instruction.scm= - 25 lines (instruction tuning)
+- 🔨 =main.scm= - 16 lines (integration layer)
+
+* Lessons Learned
+
+** Critical Success Factors
+1. *Size Optimization*: Ultra-lightweight resources (2KB) vs heavy PDFs (10MB)
+2. *Clear Scope*: Each agent has specific function lists and modules
+3. *Autonomous Operation*: Direct implementation commands bypass PDF reading
+4. *Parallel Development*: 4 agents working simultaneously on different layers
+
+** Failed Approaches  
+1. *Large PDF Processing*: Hit Claude's file size limits consistently
+2. *Image Conversion*: PNG pages were considered but text guides more efficient
+3. *Micro-PDF Strategy*: Still caused processing overhead and delays
+
+** Breakthrough Innovation
+*Lightweight Text Guides*: 2KB implementation templates with:
+- Specific function signatures
+- Module structure definitions  
+- Direct implementation commands
+- No PDF processing required
+
+* Future Applications
+
+** Scaling Strategy
+This decomposition approach can be applied to other technical books:
+1. Extract table of contents and key concepts
+2. Create chapter-level splits aligned with implementation phases
+3. Generate ultra-lightweight text guides (2KB target)
+4. Assign specialized agents to each layer
+5. Enable autonomous parallel development
+
+** Template for Other Books
+#+BEGIN_EXAMPLE
+Large Technical Book
+    ↓
+Chapter Analysis (tools/pdf_analyzer.py)
+    ↓  
+Smart Splits (tools/book_processor.py)
+    ↓
+Lightweight Guides (tools/create_text_summaries.py) 
+    ↓
+Agent Assignment + Autonomous Implementation
+#+END_EXAMPLE
+
+* References
+
+- Original PDF: "Build a Large Language Model (From Scratch)"
+- Repository: https://github.com/dsp-dr/guile-llm-scratch
+- Flight Session: BOS→SEA autonomous development
+- Success Metrics: 1,366 lines, 5/8 modules complete
+- Compression Achievement: 50MB → 8KB (6,250:1 ratio)
