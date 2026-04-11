@@ -2,3 +2,5 @@
 book_chapters*
 *.pdf
 tmp/
+*.log
+*.core
