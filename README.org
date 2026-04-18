@@ -6,7 +6,7 @@
 [[https://img.shields.io/badge/ML-transformer-purple.svg][https://img.shields.io/badge/ML-transformer-purple.svg]]
 [[https://img.shields.io/badge/dependencies-zero-brightgreen.svg][https://img.shields.io/badge/dependencies-zero-brightgreen.svg]]
 [[https://img.shields.io/badge/license-MIT-green.svg][https://img.shields.io/badge/license-MIT-green.svg]]
-[[https://img.shields.io/badge/lines-1.4k-orange.svg][https://img.shields.io/badge/lines-1.4k-orange.svg]]
+[[https://img.shields.io/badge/lines-3.9k-orange.svg][https://img.shields.io/badge/lines-3.9k-orange.svg]]
 
 * Overview
 
@@ -52,9 +52,9 @@ graph TB
 * Installation
 
 ** Prerequisites
-- FreeBSD 14.3 or later
-- Guile 3.0.10 or later
-- GNU Make 4.4+
+- Guile 3.0.10 or later (~guile3~ on FreeBSD, ~guile~ on most Linux/macOS)
+- GNU Make 4.4+ (~gmake~ on FreeBSD)
+- Emacs (for org-babel tangling, optional)
 
 ** Building from Source
 #+BEGIN_SRC bash
@@ -103,8 +103,8 @@ gmake repl
 # Start Guile REPL with project modules
 guile3 -L src/
 
-# Or use the provided script
-./repl.scm
+# Or via Makefile
+gmake repl
 #+END_SRC
 
 * Roadmap to v1.0.0
@@ -119,7 +119,11 @@ guile3 -L src/
 ** v0.2.0 - Training Infrastructure (Current)
 - [ ] Automatic differentiation
 - [ ] Backpropagation implementation
-- [ ] Optimizer algorithms (SGD, Adam)
+- [X] Optimizer algorithms (SGD, Adam, AdaGrad) — implemented in ~src/llm/pretrain.scm~
+- [X] Data loader and batching — implemented in ~src/llm/pretrain.scm~
+- [X] Loss functions (cross-entropy) — implemented in ~src/llm/pretrain.scm~
+- [X] Fine-tuning for classification — implemented in ~src/llm/finetune.scm~
+- [X] Instruction tuning and RLHF — implemented in ~src/llm/instruction.scm~
 
 ** v0.3.0 - System Integration
 - [ ] Module interconnections
@@ -168,22 +172,36 @@ guile3 -L src/
 project-root/
 ├── README.org             # This file
 ├── Makefile              # Build automation
-├── guix.scm             # Guix package definition
 ├── .envrc               # direnv configuration
-├── src/                 # Source code
-│   ├── core/           # Core functionality
-│   ├── utils/          # Utilities
-│   └── main.scm        # Entry point
-├── tests/              # Test suite
-│   ├── core/
-│   └── test-runner.scm
-├── docs/               # Literate documentation
+├── src/
+│   ├── core/            # Core tensor/ML primitives
+│   │   ├── tensor.scm       # Tensor ops (SRFI-4 f32vectors)
+│   │   ├── tokenizer.scm   # BPE tokenizer
+│   │   ├── attention.scm   # Attention mechanisms
+│   │   ├── transformer.scm # Encoder/decoder architecture
+│   │   └── example.scm     # Literate programming demo
+│   └── llm/             # Book chapter implementations
+│       ├── main.scm         # Entry point
+│       ├── fundamentals.scm # Ch1: tokenization basics
+│       ├── text.scm         # Ch2: text preprocessing
+│       ├── attention.scm    # Ch3: attention mechanisms
+│       ├── gpt.scm          # Ch4: GPT model
+│       ├── pretrain.scm     # Ch5: pretraining + optimizers
+│       ├── finetune.scm     # Ch6: fine-tuning
+│       └── instruction.scm  # Ch7: instruction tuning + RLHF
+├── tests/
+│   ├── core/            # SRFI-64 tests for core modules
+│   └── test-tokenizer.scm
+├── docs/               # Literate org-mode documentation
 │   ├── implementation.org
-│   ├── design.org
-│   ├── notes.org
-│   └── api.org
-├── examples/           # Usage examples
-└── tmp/               # Book PDFs (not in repo)
+│   ├── attention.org
+│   ├── tensor.org
+│   ├── tokenizer.org
+│   ├── transformer.org
+│   └── book-decomposition.org
+├── data/               # Training data
+│   └── training-texts.scm
+└── tools/              # Python utilities for book PDF processing
 #+END_EXAMPLE
 
 ** Contributing
@@ -208,26 +226,33 @@ This project is licensed under the MIT License. See LICENSE file for details.
 * Current Implementation Status
 
 ** Completed Modules
-- ✅ `tensor.scm` - Efficient tensor operations with broadcasting
-- ✅ `tokenizer.scm` - BPE tokenization from scratch  
-- ✅ `attention.scm` - Scaled dot-product and multi-head attention
-- ✅ `transformer.scm` - Complete encoder/decoder architecture
+*** Core Layer (~src/core/~)
+- ✅ ~tensor.scm~ - Tensor operations with SRFI-4 f32vectors, broadcasting, matmul
+- ✅ ~tokenizer.scm~ - BPE tokenization from scratch
+- ✅ ~attention.scm~ - Scaled dot-product and multi-head attention, positional encoding
+- ✅ ~transformer.scm~ - Complete encoder/decoder architecture, text generation
+
+*** Book Chapter Layer (~src/llm/~)
+- ✅ ~fundamentals.scm~ - Tokenization and vocabulary building (Ch1)
+- ✅ ~text.scm~ - Text preprocessing, corpus loading, chunking (Ch2)
+- ✅ ~attention.scm~ - Attention mechanisms (Ch3)
+- ✅ ~gpt.scm~ - GPT model config and forward pass (Ch4)
+- ✅ ~pretrain.scm~ - Pretraining, data loaders, optimizers (Adam/SGD/AdaGrad), loss (Ch5)
+- ✅ ~finetune.scm~ - Fine-tuning for classification (Ch6)
+- ✅ ~instruction.scm~ - Instruction tuning and RLHF (Ch7)
 
 ** Next Steps
 1. Implement automatic differentiation for backpropagation
-2. Add training loop with loss functions (cross-entropy, MSE)
-3. Create data loading pipeline for text datasets
-4. Build example models (GPT-nano for testing)
-5. Performance profiling and optimization
+2. End-to-end training integration (connect llm/ modules to core/ tensors)
+3. Performance profiling and optimization
 
 * Contributing
 
-This project uses literate programming - all code is documented in `docs/*.org` files and tangled to generate the Scheme source. To contribute:
+This project uses literate programming -- documentation in ~docs/*.org~ files can be tangled to generate Scheme source. To contribute:
 
-1. Edit the relevant `.org` file in `docs/`
-2. Run `gmake tangle` to generate Scheme code
-3. Run `gmake test` to ensure tests pass
-4. Submit PR with both org and generated files
+1. Edit Scheme source directly in ~src/~ or the relevant ~.org~ file in ~docs/~
+2. Run ~gmake test~ to ensure tests pass
+3. Submit PR
 
 * Acknowledgments
 

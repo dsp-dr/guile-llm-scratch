@@ -1,0 +1,84 @@
+#+TITLE: guile-llm-scratch Specification
+#+AUTHOR: DSP-DR Team
+#+DATE: 2026-04-18
+
+* Purpose
+
+Pure Guile 3 implementation of transformer-based language models from scratch, following "Build a Large Language Model (From Scratch)" by Sebastian Raschka. Zero external ML dependencies -- all tensor operations, attention mechanisms, tokenizers, and training loops are implemented in Scheme.
+
+* Goals
+
+- Implement the complete LLM stack (tensors through instruction tuning) in pure Scheme
+- Follow the book's chapter structure as a teaching/learning resource
+- Use literate programming (org-mode + Babel) for documentation-first development
+- Maintain zero ML library dependencies; only Guile SRFIs
+
+* Non-Goals
+
+- Production-grade performance (this is an educational implementation)
+- GPU acceleration or FFI bindings to BLAS/cuDNN
+- Compatibility with existing model weight formats (GGUF, safetensors)
+
+* Architecture
+
+The codebase has two parallel module trees:
+
+** =src/core/= -- Foundational Primitives
+
+| Module | Exports | Purpose |
+|------------------+-----------------------------------+-----------------------------------------------|
+| =tensor.scm= | make-tensor, matmul, broadcast... | SRFI-4 f32vector tensors with shape/strides |
+| =tokenizer.scm= | train-bpe, encode, decode | Byte-pair encoding tokenizer |
+| =attention.scm= | scaled-dot-product-attention, MHA | Multi-head attention, positional encoding |
+| =transformer.scm=| make-transformer, generate-text | Encoder/decoder stacks, GPT configs |
+| =example.scm= | make-example, process-example | Literate programming demonstration module |
+
+** =src/llm/= -- Book Chapter Implementations
+
+| Module | Chapter | Purpose |
+|--------------------+---------+---------------------------------------------------|
+| =fundamentals.scm= | 1 | Tokenization, vocabulary building |
+| =text.scm= | 2 | Text preprocessing, corpus loading, chunking |
+| =attention.scm= | 3 | Attention mechanisms (simplified, list-based) |
+| =gpt.scm= | 4 | GPT model configuration and forward pass |
+| =pretrain.scm= | 5 | Data loaders, loss functions, optimizers (Adam/SGD/AdaGrad) |
+| =finetune.scm= | 6 | Classification head, fine-tuning pipeline |
+| =instruction.scm= | 7 | Instruction tuning, RLHF, reward models |
+| =main.scm= | -- | Entry point, demo runner, component test |
+
+** Relationship Between Trees
+
+=core/= provides real tensor-backed implementations (f32vectors, shape-checked ops). =llm/= provides chapter-by-chapter implementations that are more pedagogical, using simpler data representations (nested lists, alists). The two trees are not yet fully integrated: =llm/main.scm= imports from =llm/= modules but not from =core/=.
+
+** Supporting Components
+
+| Path | Purpose |
+|-----------+-----------------------------------------------|
+| =tests/= | SRFI-64 test suites for core modules |
+| =docs/= | Org-mode literate documentation (tangles to source) |
+| =data/= | Training text corpus |
+| =tools/= | Python utilities for book PDF processing |
+
+* Key Design Decisions
+
+- *SRFI-4 f32vectors for tensor storage*: Row-major layout with computed strides. Trades generality for efficiency within pure Scheme constraints.
+- *Two module trees*: =core/= for reusable primitives, =llm/= for book-faithful chapter code. Allows pedagogical clarity without compromising the core library.
+- *BPE from scratch*: Byte-level vocabulary (0-255) plus special tokens, merge-based encoding/decoding. No external tokenizer dependency.
+- *Literate programming*: =docs/*.org= files are the canonical source for some modules, tangled via Emacs org-babel.
+
+* Current Status
+
+- All 7 book chapters have corresponding module implementations (~3,900 lines total)
+- Core tensor, tokenizer, attention, and transformer modules are functional
+- Test suites exist for core modules (SRFI-64)
+- Training infrastructure (optimizers, data loaders) is implemented but autograd is missing
+- No end-to-end training has been demonstrated yet
+
+* Known Limitations
+
+- *No automatic differentiation*: Backpropagation cannot run without autograd; optimizers exist but parameter updates are not connected to a gradient computation
+- *Core/LLM integration gap*: The =llm/= modules use list-based representations, not =core/tensor= objects; unification is needed for end-to-end training
+- *tensor-concat and tensor-split*: Declared in exports but raise "not yet implemented" errors
+- *Axis-specific tensor-sum*: Only full-tensor sum is implemented; per-axis reduction is stubbed
+- *Softmax and transpose*: Only implemented for 2D tensors
+- *No checkpoint persistence*: save/load-checkpoint in =pretrain.scm= are defined but untested
