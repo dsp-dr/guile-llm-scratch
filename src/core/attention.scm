@@ -17,7 +17,7 @@
             softmax
             layer-norm))
 
-(define (softmax tensor #:optional (axis -1))
+(define* (softmax tensor #:optional (axis -1))
   "Apply softmax activation along specified axis."
   (let* ((data (tensor-data tensor))
          (shape (tensor-shape tensor))
@@ -68,7 +68,7 @@
                         (+ std-dev epsilon))))
     result))
 
-(define (scaled-dot-product-attention query key value #:optional mask)
+(define* (scaled-dot-product-attention query key value #:optional mask)
   "Compute scaled dot-product attention.
    Attention(Q,K,V) = softmax(QK^T / sqrt(d_k))V"
   (match (list (tensor-shape query)
@@ -144,7 +144,7 @@
      (tensor-reshape tensor (list batch seq-len (* n-heads head-dim))))
     (_ (error "Invalid tensor shape for combine-heads"))))
 
-(define (forward-attention mha query key value #:optional mask)
+(define* (forward-attention mha query key value #:optional mask)
   "Forward pass through multi-head attention."
   (let* ((batch-size (car (tensor-shape query)))
          (seq-len (cadr (tensor-shape query)))
