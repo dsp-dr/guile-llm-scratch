@@ -30,7 +30,7 @@
   (d-ff ff-d-ff)       ; Feed-forward dimension
   (dropout ff-dropout)) ; Dropout rate
 
-(define (make-feed-forward d-model d-ff #:optional (dropout 0.1))
+(define* (make-feed-forward d-model d-ff #:optional (dropout 0.1))
   "Create a position-wise feed-forward network."
   (%make-feed-forward
    (tensor-random (list d-model d-ff) -0.1 0.1)
@@ -86,7 +86,7 @@
   (norm1 block-norm1)            ; First layer norm
   (norm2 block-norm2))           ; Second layer norm
 
-(define (make-transformer-block d-model n-heads d-ff #:optional (dropout 0.1))
+(define* (make-transformer-block d-model n-heads d-ff #:optional (dropout 0.1))
   "Create a transformer encoder/decoder block."
   (%make-transformer-block
    (make-multi-head-attention n-heads d-model)
@@ -94,7 +94,7 @@
    (lambda (x) (layer-norm x 1e-6))
    (lambda (x) (layer-norm x 1e-6))))
 
-(define (forward-block block input #:optional mask)
+(define* (forward-block block input #:optional mask)
   "Forward pass through transformer block."
   ;; Self-attention with residual connection
   (let* ((attn-output (forward-attention (block-attention block)
@@ -122,7 +122,7 @@
                     (iota n-layers))))
     (%make-encoder blocks n-layers d-model)))
 
-(define (forward-encoder encoder input #:optional mask)
+(define* (forward-encoder encoder input #:optional mask)
   "Forward pass through encoder stack."
   (let loop ((blocks (encoder-blocks encoder))
              (hidden input))
@@ -149,7 +149,7 @@
                         (iota n-layers))))
     (%make-decoder blocks cross-attn n-layers d-model)))
 
-(define (forward-decoder decoder input encoder-output 
+(define* (forward-decoder decoder input encoder-output 
                         #:optional (self-mask #f) (cross-mask #f))
   "Forward pass through decoder stack."
   (let loop ((blocks (decoder-blocks decoder))
@@ -226,7 +226,7 @@
                          output-proj d-model vocab-size max-seq-len)))
     (_ (error "Invalid transformer configuration"))))
 
-(define (forward-transformer transformer input-ids 
+(define* (forward-transformer transformer input-ids 
                            #:optional (target-ids #f))
   "Forward pass through complete transformer."
   (let* ((src-embeddings (embed-tokens (transformer-embedding transformer)
@@ -260,7 +260,7 @@
                     encoder-output)))
     output))
 
-(define (generate-text transformer prompt max-length 
+(define* (generate-text transformer prompt max-length 
                       #:optional (temperature 1.0))
   "Generate text from a prompt using the transformer."
   (let* ((tokenizer (transformer-tokenizer transformer))
@@ -305,8 +305,8 @@
           i
           (loop (+ i 1))))))
 
+;; Configuration for a tiny GPT model.
 (define gpt-nano-config
-  "Configuration for a tiny GPT model."
   '((d-model . 128)
     (n-heads . 4)
     (n-layers . 2)
@@ -314,8 +314,8 @@
     (vocab-size . 1000)
     (max-seq-len . 128)))
 
+;; Configuration for a small GPT model.
 (define gpt-small-config
-  "Configuration for a small GPT model."
   '((d-model . 256)
     (n-heads . 8)
     (n-layers . 4)
@@ -323,8 +323,8 @@
     (vocab-size . 5000)
     (max-seq-len . 256)))
 
+;; Configuration for a medium GPT model.
 (define gpt-medium-config
-  "Configuration for a medium GPT model."
   '((d-model . 512)
     (n-heads . 8)
     (n-layers . 6)

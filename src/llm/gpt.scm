@@ -81,7 +81,7 @@
     (mean (map (lambda (x) (expt (- x m) 2)) lst))))
 
 ;;; Layer normalization
-(define (layer-normalization input gamma beta #:optional (eps 1e-5))
+(define* (layer-normalization input gamma beta #:optional (eps 1e-5))
   "Apply layer normalization: LayerNorm(x) = γ * (x - μ) / √(σ² + ε) + β"
   (map (lambda (row)
          (let* ((m (mean row))
@@ -93,7 +93,7 @@
        input))
 
 ;;; Create layer normalization with learnable parameters
-(define (create-layer-norm dim #:optional (eps 1e-5))
+(define* (create-layer-norm dim #:optional (eps 1e-5))
   "Create a layer normalization module with learnable gamma and beta"
   (let ((gamma (make-list dim 1.0))
         (beta (make-list dim 0.0)))
@@ -147,7 +147,7 @@
     (linear-transform activated weight2 bias2)))
 
 ;;; Dropout (simplified - returns input during inference)
-(define (dropout input rate #:optional (training #f))
+(define* (dropout input rate #:optional (training #f))
   "Apply dropout regularization (simplified version)"
   (if (not training)
       input
@@ -264,7 +264,7 @@
     (matrix-multiply hidden (matrix-transpose weight))))
 
 ;;; Sample from probability distribution
-(define (sample-from-probs probs #:optional (temperature 1.0))
+(define* (sample-from-probs probs #:optional (temperature 1.0))
   "Sample token ID from probability distribution"
   (let* ((scaled (map (lambda (p) (/ p temperature)) probs))
          (soft-probs (softmax scaled))
@@ -283,7 +283,7 @@
     idx))
 
 ;;; Text generation
-(define (generate-text model initial-tokens max-length 
+(define* (generate-text model initial-tokens max-length 
                       #:optional (temperature 1.0))
   "Generate text using the GPT model"
   (let ((config (gpt-model-config model))

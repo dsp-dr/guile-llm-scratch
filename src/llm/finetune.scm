@@ -1,7 +1,7 @@
 ;;; fine-tuning.scm --- Fine-tuning for Classification
 ;;; Chapter 6: Implementation
 
-(define-module (llm fine tuning)
+(define-module (llm finetune)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
@@ -49,7 +49,7 @@
   (bias head-bias set-head-bias!))
 
 ;;; Create a classification head for fine-tuning
-(define (create-classification-head input-dim num-classes #:optional (dropout 0.1))
+(define* (create-classification-head input-dim num-classes #:optional (dropout 0.1))
   "Create a classification head with linear layer and softmax output.
    input-dim: dimension of input features (e.g., 768 for base models)
    num-classes: number of target classes

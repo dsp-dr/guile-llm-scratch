@@ -9,7 +9,6 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-26)
-  #:use-module (srfi srfi-69) ; Hash tables
   #:export (make-tokenizer
             tokenizer?
             tokenizer-vocab

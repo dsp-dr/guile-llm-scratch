@@ -8,6 +8,7 @@
   #:use-module (ice-9 format)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-4)   ; Homogeneous numeric vectors
+  #:use-module (srfi srfi-4 gnu) ; f32vector-copy
   #:use-module (srfi srfi-8)   ; receive
   #:use-module (srfi srfi-9)   ; Records
   #:use-module (srfi srfi-26)  ; cut
@@ -125,7 +126,7 @@
   "Create tensor filled with ones."
   (make-tensor (make-f32vector (compute-size shape) 1.0) shape))
 
-(define (tensor-random shape #:optional (low 0.0) (high 1.0))
+(define* (tensor-random shape #:optional (low 0.0) (high 1.0))
   "Create tensor with random values between low and high."
   (let* ((size (compute-size shape))
          (range (- high low))
@@ -184,7 +185,7 @@
       (error "Cannot reshape: size mismatch" old-size new-size))
     (make-tensor (f32vector-copy (tensor-data tensor)) new-shape)))
 
-(define (tensor-transpose tensor #:optional (axes #f))
+(define* (tensor-transpose tensor #:optional (axes #f))
   "Transpose tensor dimensions."
   (match (tensor-shape tensor)
     ((rows cols)  ; 2D case
@@ -267,7 +268,7 @@
        result))
     (_ (error "matmul requires 2D tensors"))))
 
-(define (tensor-sum tensor #:optional (axis #f))
+(define* (tensor-sum tensor #:optional (axis #f))
   "Sum tensor elements along axis (or all if axis is #f)."
   (if axis
       (error "Axis-specific sum not yet implemented")
@@ -277,11 +278,11 @@
              (sum 0.0 (+ sum (f32vector-ref data i))))
             ((>= i size) sum)))))
 
-(define (tensor-mean tensor #:optional (axis #f))
+(define* (tensor-mean tensor #:optional (axis #f))
   "Compute mean of tensor elements."
   (/ (tensor-sum tensor axis) (tensor-size tensor)))
 
-(define (tensor-std tensor #:optional (axis #f))
+(define* (tensor-std tensor #:optional (axis #f))
   "Compute standard deviation of tensor elements."
   (let* ((mean (tensor-mean tensor axis))
          (data (tensor-data tensor))
@@ -337,10 +338,10 @@
                            i j))))
     result))
 
-(define (tensor-concat tensors #:optional (axis 0))
+(define* (tensor-concat tensors #:optional (axis 0))
   "Concatenate tensors along specified axis."
   (error "Concatenation not yet implemented"))
 
-(define (tensor-split tensor n #:optional (axis 0))
+(define* (tensor-split tensor n #:optional (axis 0))
   "Split tensor into n parts along axis."
   (error "Splitting not yet implemented"))

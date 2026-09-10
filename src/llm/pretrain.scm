@@ -1,7 +1,7 @@
 ;;; pretraining.scm --- Pretraining on Unlabeled Data
 ;;; Chapter 5: Implementation
 
-(define-module (llm pretraining)
+(define-module (llm pretrain)
   #:use-module (ice-9 match)
   #:use-module (ice-9 textual-ports)
   #:use-module (srfi srfi-1)
